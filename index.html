@@ -1467,6 +1467,17 @@ function saveLink() {
   closeLinkModal();
   toast('Link added!');
 }
+function showToast(message) {
+  const existing = document.getElementById('sync-toast');
+  if(existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.id = 'sync-toast';
+  toast.textContent = message;
+  toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#2B2E2E;color:#FCFAF5;padding:10px 20px;border-radius:20px;font-size:13px;font-family:"DM Sans",sans-serif;z-index:9999;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
 function showConfirmDelete(message, onConfirm) {
   // Remove any existing confirm overlay
   const existing = document.getElementById('confirm-overlay');
