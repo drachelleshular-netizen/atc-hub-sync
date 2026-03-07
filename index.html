@@ -301,6 +301,11 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
   <!-- Month content rendered by JS -->
 </div>
 
+<!-- ── HALEY CALENDAR VIEW ── -->
+<div id="view-haley-cal" class="view" style="display:none">
+  <!-- Rendered by JS -->
+</div>
+
 <!-- ── ANALYTICS VIEW ── -->
 <div id="view-analytics" class="view" style="display:none">
   <div id="analytics-content"></div>
@@ -379,6 +384,12 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
   <button class="bnav-btn" id="bnav-analytics" onclick="switchView('analytics')"><span class="bnav-icon">📈</span><span class="bnav-label">Analytics</span></button>
   <button class="bnav-btn" id="bnav-links" onclick="switchView('links')"><span class="bnav-icon">🔗</span><span class="bnav-label">Links</span></button>
   <button class="bnav-btn" id="bnav-campaign" onclick="switchView('campaign')"><span class="bnav-icon">🎯</span><span class="bnav-label">Campaign</span></button>
+</div>
+
+<!-- ── HALEY BOTTOM NAV ── -->
+<div class="bottom-nav" id="haley-bottom-nav" style="display:none">
+  <button class="bnav-btn active" id="hbnav-cal" onclick="switchHaleyView('haley-cal')"><span class="bnav-icon">📅</span><span class="bnav-label">Calendar</span></button>
+  <button class="bnav-btn" id="hbnav-list" onclick="switchHaleyView('calendar')"><span class="bnav-icon">📋</span><span class="bnav-label">My Posts</span></button>
 </div>
 
 <!-- ── ADD POST MODAL ── -->
@@ -926,6 +937,7 @@ function setRole(role) {
   document.getElementById('main-header').style.display = 'block';
   document.getElementById('app').style.display = 'block';
   document.getElementById('bottom-nav').style.display = role === 'dana' ? 'flex' : 'none';
+  document.getElementById('haley-bottom-nav').style.display = role === 'haley' ? 'flex' : 'none';
   // Remove bottom padding for Haley since she has no nav bar
   document.querySelectorAll('.view').forEach(v => v.style.paddingBottom = role === 'dana' ? '' : '24px');
   const pill = document.getElementById('role-pill');
@@ -953,12 +965,24 @@ function checkPendingNotifications() {
   toast(count === 1 ? 'Haley uploaded content! ' + last.msg.replace('Hi Dana! Haley just uploaded content for ','').replace(' and it is ready for your review!','') : count + ' posts marked Content Uploaded by Haley!');
   localStorage.removeItem('atc-pending-notify');
 }
+function switchHaleyView(name) {
+  // Switch between haley-cal (grid) and calendar (card list)
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  document.getElementById('view-' + name).style.display = 'block';
+  // Update Haley tab active state
+  document.getElementById('hbnav-cal').classList.toggle('active', name === 'haley-cal');
+  document.getElementById('hbnav-list').classList.toggle('active', name === 'calendar');
+  if(name === 'haley-cal') renderHaleyCalendar();
+  if(name === 'calendar') renderCalendar();
+}
+
 function switchRole() {
   currentRole = null;
   document.getElementById('role-gate').style.display = 'flex';
   document.getElementById('main-header').style.display = 'none';
   document.getElementById('app').style.display = 'none';
   document.getElementById('bottom-nav').style.display = 'none';
+  document.getElementById('haley-bottom-nav').style.display = 'none';
 }
 
 // ══════════════════════════════════════════════
@@ -981,6 +1005,7 @@ function switchMonth(m, btn) {
   btn.classList.add('active');
   currentMonth = m;
   renderCalendar();
+  renderHaleyCalendar();
   buildAnalytics();
 }
 
@@ -1005,6 +1030,162 @@ const DRIVE_FOLDERS = {
   may: { url: 'https://drive.google.com/drive/folders/13yViqv_I9UPU2c7mq_iC_r8y4nNfnG4O?usp=drive_link', label: 'May Content Folder' },
 };
 
+
+// HALEY CALENDAR VIEW
+function renderHaleyCalendar() {
+  var container = document.getElementById('view-haley-cal');
+  if(!container) return;
+
+  var monthPosts = (posts[currentMonth] || []).filter(function(p){ return p.owner === 'haley' || p.owner === 'both'; });
+  var postsByDate = {};
+  monthPosts.forEach(function(p){
+    if(!postsByDate[p.date]) postsByDate[p.date] = [];
+    postsByDate[p.date].push(p);
+  });
+
+  var monthMap = {mar:[2026,3], apr:[2026,4], may:[2026,5]};
+  var ym = monthMap[currentMonth] || [2026,3];
+  var yr = ym[0], mo = ym[1];
+  var daysInMonth = new Date(yr, mo, 0).getDate();
+  var firstDow = new Date(yr, mo-1, 1).getDay();
+
+  var statusColors = {draft:'#B5A187','in-progress':'#A1786B',uploaded:'#5A8F6A',review:'#7A9BBF',scheduled:'#B88AC0',published:'#4A7A5A'};
+  var statusLabels = {draft:'Draft','in-progress':'In Progress',uploaded:'Uploaded',review:'Review',scheduled:'Scheduled',published:'Published'};
+
+  var today = new Date();
+  var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+
+  // Legend
+  var usedStatuses = [];
+  monthPosts.forEach(function(p){ var s = p.haleyStatus||p.status||'draft'; if(usedStatuses.indexOf(s)<0) usedStatuses.push(s); });
+  var legendHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">';
+  usedStatuses.forEach(function(s){
+    legendHtml += '<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#594E42">';
+    legendHtml += '<div style="width:10px;height:10px;border-radius:50%;background:' + (statusColors[s]||'#B5A187') + '"></div>';
+    legendHtml += (statusLabels[s]||s) + '</div>';
+  });
+  legendHtml += '</div>';
+
+  // Grid header
+  var dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var gridHtml = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:20px">';
+  dayNames.forEach(function(d){
+    gridHtml += '<div style="text-align:center;font-size:10px;font-weight:600;letter-spacing:0.08em;color:#B5A187;padding:4px 0;text-transform:uppercase">' + d + '</div>';
+  });
+
+  for(var i=0; i<firstDow; i++) gridHtml += '<div></div>';
+
+  for(var day=1; day<=daysInMonth; day++){
+    var mo2 = String(mo).padStart(2,'0');
+    var day2 = String(day).padStart(2,'0');
+    var dateStr = yr + '-' + mo2 + '-' + day2;
+    var dayPosts = postsByDate[dateStr] || [];
+    var isToday = dateStr === todayStr;
+    var isPast = dateStr < todayStr;
+    var hasPost = dayPosts.length > 0;
+
+    var dotsHtml = '';
+    dayPosts.forEach(function(p){
+      var s = p.haleyStatus||p.status||'draft';
+      dotsHtml += '<div style="width:7px;height:7px;border-radius:50%;background:' + (statusColors[s]||'#B5A187') + ';flex-shrink:0" title="' + p.title + '"></div>';
+    });
+
+    var bgColor = isToday ? '#A1786B' : (hasPost ? '#FDF8F2' : 'transparent');
+    var textColor = isToday ? '#FCFAF5' : (isPast && !hasPost ? '#C8BDB8' : '#2B2E2E');
+    var border = (hasPost && !isToday) ? '1px solid #D1B5AB' : (isToday ? 'none' : '1px solid transparent');
+    var fontWeight = (isToday || hasPost) ? '700' : '400';
+    var cursor = hasPost ? 'pointer' : 'default';
+    var onclick = hasPost ? 'onclick="toggleHaleyDayDetail(\'' + dateStr + '\')"' : '';
+
+    gridHtml += '<div ' + onclick + ' style="border-radius:10px;padding:6px 4px 5px;background:' + bgColor + ';border:' + border + ';cursor:' + cursor + ';min-height:52px;display:flex;flex-direction:column;align-items:center;gap:3px;transition:background 0.15s">';
+    gridHtml += '<div style="font-size:13px;font-weight:' + fontWeight + ';color:' + textColor + ';line-height:1">' + day + '</div>';
+    if(hasPost) gridHtml += '<div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center">' + dotsHtml + '</div>';
+    gridHtml += '</div>';
+  }
+  gridHtml += '</div>';
+
+  // Up Next list
+  var upcoming = monthPosts.filter(function(p){
+    var s = p.haleyStatus||p.status||'draft';
+    return s !== 'uploaded' && p.date >= todayStr;
+  }).sort(function(a,b){ return a.date.localeCompare(b.date); }).slice(0,5);
+
+  var upcomingHtml = '';
+  if(upcoming.length > 0){
+    upcomingHtml += '<div style="font-family:\'Cormorant Garamond\',serif;font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#A1786B;margin:4px 0 10px">Up Next</div>';
+    upcoming.forEach(function(p){
+      var parts = p.date.split('-');
+      var _y=parseInt(parts[0]),_m=parseInt(parts[1]),_d=parseInt(parts[2]);
+      var dateLabel = new Date(_y,_m-1,_d).toLocaleDateString('en',{month:'short',day:'numeric'});
+      var monLabel = new Date(_y,_m-1,_d).toLocaleDateString('en',{month:'short'});
+      var s = p.haleyStatus||p.status||'draft';
+      var col = statusColors[s]||'#B5A187';
+      upcomingHtml += '<div style="display:flex;align-items:center;gap:12px;background:#FDF8F2;border:1px solid #D1B5AB;border-radius:12px;padding:12px 14px;margin-bottom:8px">';
+      upcomingHtml += '<div style="width:38px;height:38px;border-radius:10px;background:#FCFAF5;border:1px solid #D1B5AB;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">';
+      upcomingHtml += '<div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#B5A187;text-transform:uppercase">' + monLabel + '</div>';
+      upcomingHtml += '<div style="font-size:17px;font-weight:700;color:#2B2E2E;line-height:1">' + _d + '</div></div>';
+      upcomingHtml += '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;color:#2B2E2E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + p.title + '</div>';
+      upcomingHtml += '<div style="font-size:11px;color:#B5A187;margin-top:2px">' + p.format + '</div></div>';
+      upcomingHtml += '<div style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:4px 9px;border-radius:8px;color:' + col + ';background:' + col + '22">';
+      upcomingHtml += '<div style="width:6px;height:6px;border-radius:50%;background:' + col + '"></div>' + (statusLabels[s]||s) + '</div></div>';
+    });
+  }
+
+  // Drive banner
+  var folder = DRIVE_FOLDERS[currentMonth];
+  var driveBanner = '<div style="background:#F5F2EC;border:1px solid #D1B5AB;border-radius:14px;padding:14px;margin-bottom:16px">';
+  driveBanner += '<div style="font-size:10px;font-weight:600;letter-spacing:0.13em;text-transform:uppercase;color:#B5A187;margin-bottom:8px">Asset Folder</div>';
+  driveBanner += '<a href="' + folder.url + '" target="_blank" style="display:flex;align-items:center;gap:8px;background:#FCFAF5;border:1px solid #D1B5AB;border-radius:10px;padding:9px 12px;text-decoration:none;color:#594E42;font-size:12px;font-weight:500">';
+  driveBanner += 'Open ' + folder.label + ' in Drive</a></div>';
+
+  container.innerHTML = '<div id="haley-detail-panel" data-date=""></div>' + driveBanner + legendHtml + gridHtml + upcomingHtml;
+}
+
+function toggleHaleyDayDetail(dateStr) {
+  var panel = document.getElementById('haley-detail-panel');
+  if(!panel) return;
+  if(panel.getAttribute('data-date') === dateStr && panel.innerHTML !== '') {
+    panel.innerHTML = '';
+    panel.setAttribute('data-date','');
+    return;
+  }
+  panel.setAttribute('data-date', dateStr);
+
+  var monthPosts = (posts[currentMonth] || []).filter(function(p){ return (p.owner==='haley'||p.owner==='both') && p.date===dateStr; });
+  if(!monthPosts.length){ panel.innerHTML=''; return; }
+
+  var statusColors = {draft:'#B5A187','in-progress':'#A1786B',uploaded:'#5A8F6A',review:'#7A9BBF',scheduled:'#B88AC0',published:'#4A7A5A'};
+  var statusLabels = {draft:'Draft','in-progress':'In Progress',uploaded:'Uploaded',review:'Review',scheduled:'Scheduled',published:'Published'};
+
+  var parts = dateStr.split('-');
+  var yr2=parseInt(parts[0]),mo2=parseInt(parts[1]),day2=parseInt(parts[2]);
+  var dateLabel = new Date(yr2,mo2-1,day2).toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'});
+
+  var html = '<div style="background:#FDF8F2;border:1.5px solid #A1786B;border-radius:16px;padding:16px;margin-bottom:16px">';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+  html += '<div style="font-size:13px;font-weight:700;color:#2B2E2E">' + dateLabel + '</div>';
+  html += '<button onclick="toggleHaleyDayDetail(\'' + dateStr + '\')" style="background:none;border:none;font-size:18px;color:#B5A187;cursor:pointer;padding:0;line-height:1">x</button></div>';
+
+  monthPosts.forEach(function(p){
+    var s = p.haleyStatus||p.status||'draft';
+    var col = statusColors[s]||'#B5A187';
+    var hsCur = p.haleyStatus||p.status||'draft';
+    html += '<div style="background:#FCFAF5;border-radius:12px;padding:12px;margin-bottom:8px">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
+    html += '<div style="font-size:13px;font-weight:600;color:#2B2E2E;flex:1">' + p.title + '</div>';
+    html += '<div style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:7px;background:' + col + '22;color:' + col + ';white-space:nowrap">' + (statusLabels[s]||s) + '</div></div>';
+    html += '<div style="font-size:11px;color:#B5A187;margin-top:3px">' + p.format + '</div>';
+    if(p.sharedNotes) html += '<div style="font-size:11px;color:#594E42;margin-top:6px;padding-top:6px;border-top:1px solid #E8DDD4">' + p.sharedNotes.substring(0,100) + (p.sharedNotes.length>100?'...':'') + '</div>';
+    html += '<div style="margin-top:10px"><select class="status-select" style="font-size:12px;padding:6px 10px" onchange="updateField(\'' + p.id + '\',\'haleyStatus\',this.value);renderHaleyCalendar()">';
+    html += '<option value="draft"' + (hsCur==='draft'?' selected':'') + '>Draft</option>';
+    html += '<option value="in-progress"' + (hsCur==='in-progress'?' selected':'') + '>In Progress</option>';
+    html += '<option value="uploaded"' + (hsCur==='uploaded'?' selected':'') + '>Content Uploaded</option>';
+    html += '</select></div></div>';
+  });
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
 function renderCalendar() {
   const container = document.getElementById('view-calendar');
   let monthPosts = posts[currentMonth] || [];
@@ -1018,9 +1199,2066 @@ function renderCalendar() {
 
   let html = '';
   
-  // Haley banner
+  // Haley progress bar
   if(currentRole === 'haley') {
+    const _uploaded = monthPosts.filter(p => (p.haleyStatus || p.status || 'draft') === 'uploaded').length;
+    const _goal = 8;
+    const _pct = Math.min(100, Math.round((_uploaded / _goal) * 100));
+    const _hit = _uploaded >= _goal;
+    const _remaining = _goal - _uploaded;
+    const _hitHtml = '<div style="display:flex;align-items:center;gap:8px;background:#5A8F6A18;border:1px solid #5A8F6A44;border-radius:12px;padding:12px 14px"><div style="font-size:18px">&#127881;</div><div><div style="font-size:13px;font-weight:700;color:#3A6B4A">You hit your ' + _goal + '-post goal!</div><div style="font-size:11px;color:#5A8F6A;margin-top:2px">Time to send your invoice to Dana &#128231;</div></div></div>';
+    const _missHtml = '<div style="font-size:11px;color:#B5A187">' + _remaining + ' more post' + (_remaining === 1 ? '' : 's') + ' to reach your ' + _goal + '-post contract goal</div>';
+    html += '<div style="background:#FDF8F2;border:1.5px solid ' + (_hit ? '#5A8F6A' : '#D1B5AB') + ';border-radius:16px;padding:16px;margin-bottom:16px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+        '<div style="font-size:13px;font-weight:700;color:#2B2E2E">' + MONTH_LABELS[currentMonth] + ' Progress</div>' +
+        '<div style="font-size:13px;font-weight:700;color:' + (_hit ? '#5A8F6A' : '#A1786B') + '">' + _uploaded + ' / ' + _goal + ' uploaded</div>' +
+      '</div>' +
+      '<div style="background:#E8DDD4;border-radius:99px;height:10px;overflow:hidden;margin-bottom:10px">' +
+        '<div style="background:' + (_hit ? '#5A8F6A' : '#A1786B') + ';height:100%;width:' + _pct + '%;border-radius:99px"></div>' +
+      '</div>' +
+      (_hit ? _hitHtml : _missHtml) +
+    '</div>';
+  }
 
+  // Month Drive folder banner
+  const folder = DRIVE_FOLDERS[currentMonth];
+  html += `
+  <div style="background:var(--warm);border:1px solid var(--sand);border-radius:14px;padding:14px 14px 12px;margin-bottom:16px">
+    <div style="font-size:10px;font-weight:600;letter-spacing:0.13em;text-transform:uppercase;color:var(--stone);margin-bottom:10px">📁 ${MONTH_LABELS[currentMonth]} Asset Folder</div>
+    <a href="${folder.url}" target="_blank" style="display:flex;align-items:center;gap:9px;background:var(--cream);border:1px solid var(--sand);border-radius:10px;padding:10px 12px;text-decoration:none;color:var(--espresso);font-size:13px;font-weight:500;margin-bottom:10px">
+      <span style="font-size:18px">📁</span> Open ${folder.label} in Drive
+    </a>
+    <div style="font-size:11px;color:var(--mocha);line-height:1.6">
+      <strong style="color:var(--espresso);font-size:11px">📌 Haley — name your folders like this:</strong><br>
+      <code style="background:var(--sand);padding:2px 7px;border-radius:5px;font-size:11px;color:var(--espresso)">MM-DD Post Title — Final</code><br>
+      <span style="color:var(--stone)">e.g. <em>03-09 Eloped in SF — Final</em> &nbsp;·&nbsp; <em>03-11 Palace Fine Arts — Final</em></span>
+    </div>
+  </div>`;
+
+  // Group by week
+  const groups = [[],[],[],[]];
+  monthPosts.forEach(p => groups[getWeekGroup(p.date, currentMonth)].push(p));
+
+  groups.forEach((group, wi) => {
+    if(group.length === 0) return;
+    html += `<div class="sec-label">Week ${wi+1}</div>`;
+    group.forEach(p => { html += renderCard(p); });
+  });
+
+  // Add post (Dana only)
+  if(currentRole === 'dana') {
+    html += `<button class="add-post-btn" onclick="openModal()">＋ Add Post to ${MONTH_LABELS[currentMonth]}</button>`;
+  }
+
+  container.innerHTML = html;
+}
+
+function renderCard(p) {
+  const [_y,_m,_day] = p.date.split('-').map(Number);
+  const d = new Date(_y, _m-1, _day);
+  const day = d.getDate();
+  const moShort = d.toLocaleString('en',{month:'short'});
+  const isHaley = currentRole === 'haley';
+
+  const formatTagMap = {'Photo Reel':'tag-reel','Video Reel':'tag-video','Carousel':'tag-carousel','Talking Reel':'tag-talking'};
+  const fTag = formatTagMap[p.format] || 'tag-reel';
+  const pillarTag = p.pillar === 'p1' ? '<span class="tag tag-p1">SF Exp.</span>' : '<span class="tag tag-p2">Authority</span>';
+  const ownerDot = p.owner === 'dana' ? 'owner-dot-dana' : p.owner === 'haley' ? 'owner-dot-haley' : 'owner-dot-both';
+  const ownerLabel = p.owner === 'dana' ? 'Dana' : p.owner === 'haley' ? 'Haley' : 'Both';
+
+  const linkIcons = {drive:'📁 li-drive', canva:'🎨 li-canva', gallery:'📸 li-gallery', doc:'📋 li-doc', dropbox:'📦 li-drive', ig:'📱 li-gallery'};
+  const linksHtml = (p.links||[]).map((l,li) => {
+    const [icon, cls] = (linkIcons[l.type]||'🔗 li-doc').split(' ');
+    const removeBtn = `<button onclick="removeLink('${p.id}',${li})" style="background:none;border:none;color:var(--stone);font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;margin-left:4px">×</button>`;
+    return `<a href="${l.url}" target="_blank" class="link-item" style="text-decoration:none"><div class="link-icon ${cls}">${icon}</div><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.label}</span>${removeBtn}</a>`;
+  }).join('');
+
+  // Owner editor (Dana only gets dropdown)
+  const ownerEditor = !isHaley ? `
+    <div class="field-row">
+      <div class="field-label">Owner</div>
+      <select class="owner-select" onchange="updateField('${p.id}','owner',this.value)">
+        <option value="dana"${p.owner==='dana'?' selected':''}>Dana</option>
+        <option value="haley"${p.owner==='haley'?' selected':''}>Haley</option>
+        <option value="both"${p.owner==='both'?' selected':''}>Both</option>
+      </select>
+    </div>` : '';
+
+  const captionEditable = `
+    <div class="caption-wrap" id="capwrap-${p.id}">
+      <textarea class="editable-text" id="cap-${p.id}" 
+        oninput="autoGrow(this)"
+        onchange="updateField('${p.id}','caption',this.value)"
+        placeholder="Write your caption here…"
+        style="min-height:66px;max-height:66px;resize:none;overflow:hidden;transition:max-height 0.3s ease">${p.caption||''}</textarea>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+      <button class="btn btn-copy" id="copybtn-${p.id}" onclick="copyCaption('${p.id}',this)">📋 Copy Caption</button>
+      <button class="btn btn-sm" id="expbtn-${p.id}" onclick="toggleCaption('${p.id}',this)" style="white-space:nowrap;flex-shrink:0">Show more</button>
+    </div>`;
+
+  // ── Due date (7 days before post date) ──
+  const [_dy,_dm,_dd] = p.date.split('-').map(Number); const postDate = new Date(_dy, _dm-1, _dd);
+  const dueDate = new Date(postDate);
+  dueDate.setDate(dueDate.getDate() - 7);
+  const dueDateStr = dueDate.toLocaleDateString('en',{month:'short',day:'numeric'});
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isOverdue = dueDate < today && (p.haleyStatus || p.status || 'draft') !== 'uploaded' && (p.danaStatus || p.status || 'draft') !== 'published';
+  const isDueSoon = !isOverdue && dueDate >= today && (dueDate - today) / 86400000 <= 2;
+
+  const dueDateBadge = isHaley ? `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;padding:8px 10px;border-radius:10px;background:${isOverdue ? 'rgba(184,64,64,0.08)' : isDueSoon ? 'rgba(161,120,107,0.1)' : 'rgba(184,194,199,0.15)'};border:1px solid ${isOverdue ? 'rgba(184,64,64,0.2)' : isDueSoon ? 'rgba(161,120,107,0.25)' : 'rgba(184,194,199,0.3)'}">
+      <span style="font-size:14px">${isOverdue ? '⚠️' : isDueSoon ? '⏰' : '📅'}</span>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:${isOverdue ? '#B84040' : '#594E42'}">Content due ${dueDateStr}</div>
+        <div style="font-size:10px;color:#B5A187">${isOverdue ? 'Overdue — please upload ASAP' : isDueSoon ? 'Due very soon!' : '7 days before post date'}</div>
+      </div>
+    </div>` : '';
+  // Haley sees simplified statuses; Dana sees full set
+  // Each role has their own independent status field
+  const hs = p.haleyStatus || p.status || 'draft'; // haley's status (fallback to legacy status)
+  const ds = p.danaStatus || (p.status && !['draft','in-progress','uploaded'].includes(p.status) ? p.status : 'draft'); // dana's status
+  const haleyStatusMap = {'in-progress':'s-inprogress In Progress','uploaded':'s-uploaded Uploaded ✓','draft':'s-draft Draft'};
+  const danaStatusMap  = {published:'s-published Published',review:'s-review Review',draft:'s-draft Draft',scheduled:'s-scheduled Scheduled','in-progress':'s-inprogress In Progress',uploaded:'s-uploaded Uploaded ✓'};
+  // Badge shown on card: Dana's overall status takes priority if set beyond draft
+  const badgeStatus = (!isHaley && ds !== 'draft') ? ds : hs;
+  const statusMap = isHaley ? haleyStatusMap : danaStatusMap;
+  const [sCls2, sLabel2] = (statusMap[badgeStatus] || 's-draft Draft').split(' ');
+
+  const haleyStatusSelect = `
+    <div class="field-row">
+      <div class="field-label">Your Status</div>
+      <select class="status-select" onchange="updateField('${p.id}','haleyStatus',this.value)">
+        <option value="draft"${hs==='draft'?' selected':''}>Draft</option>
+        <option value="in-progress"${hs==='in-progress'?' selected':''}>In Progress</option>
+        <option value="uploaded"${hs==='uploaded'?' selected':''}>Content Uploaded ✓</option>
+      </select>
+    </div>
+    `;
+
+  const danaStatusSelect = `
+    <div class="field-row">
+      <div class="field-label">Status</div>
+      <select class="status-select" onchange="updateField('${p.id}','danaStatus',this.value)">
+        <option value="draft"${ds==='draft'?' selected':''}>Draft</option>
+        <option value="in-progress"${ds==='in-progress'?' selected':''}>In Progress (Haley)</option>
+        <option value="uploaded"${ds==='uploaded'?' selected':''}>Content Uploaded (Haley)</option>
+        <option value="review"${ds==='review'?' selected':''}>Needs Review</option>
+        <option value="scheduled"${ds==='scheduled'?' selected':''}>Scheduled</option>
+        <option value="published"${ds==='published'?' selected':''}>Published</option>
+      </select>
+    </div>`;
+
+  // ── Notes: 2 sections only ──
+  // 1. Shared notes — Dana & Haley both see and edit (conversation back & forth)
+  // 2. Private notes — Dana only, never shown to Haley
+
+  const notePlaceholder = isHaley ? 'Add a note or question for Dana…' : 'Add notes, instructions, or questions for Haley…';
+  const sharedNotes = `
+    <div class="field-row">
+      <div class="field-label">💬 Notes <span style="font-weight:400;font-size:9px;letter-spacing:0;text-transform:none;opacity:0.7">${isHaley ? '(you & Dana)' : '(you & Haley)'}</span></div>
+      <div class="note-display ${p.notes ? '' : 'empty'}" onclick="openNoteEditor('${p.id}','notes','💬 Notes')">${p.notes ? p.notes.replace(/\n/g,'<br>') : notePlaceholder}</div>
+    </div>`;
+
+  const privateNotes = !isHaley ? `
+    <div class="field-row">
+      <div class="field-label" style="color:var(--stone)">🔒 My Notes <span style="font-weight:400;font-size:9px;opacity:0.7;text-transform:none;letter-spacing:0">(only you see this)</span></div>
+      <div class="note-display ${p.privateNotes ? '' : 'empty'}" style="background:rgba(43,46,46,0.03)" onclick="openNoteEditor('${p.id}','privateNotes','🔒 My Notes')">${p.privateNotes ? p.privateNotes.replace(/\n/g,'<br>') : 'Personal planning notes, reminders, strategy…'}</div>
+    </div>` : '';
+
+  // ── Time Tracking (Haley sees timer + log; Dana sees the log read-only) ──
+  const timeLog = p.timeLog || [];
+  const totalMins = timeLog.reduce((sum, e) => sum + (e.mins||0), 0);
+  const fmtTime = m => m >= 60 ? `${Math.floor(m/60)}h ${m%60}m` : `${m}m`;
+
+  const timeSection = isHaley ? `
+    <div class="field-row">
+      <div class="field-label">⏱ Time Tracking</div>
+      <div style="background:var(--cream);border:1px solid var(--sand);border-radius:10px;padding:10px 12px">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+          <input type="number" id="time-mins-${p.id}" min="1" max="600" placeholder="mins" 
+            style="width:70px;background:white;border:1px solid var(--sand);border-radius:8px;padding:6px 8px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--dark-brown);outline:none">
+          <input type="text" id="time-note-${p.id}" placeholder="what you worked on" 
+            style="flex:1;min-width:100px;background:white;border:1px solid var(--sand);border-radius:8px;padding:6px 8px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--dark-brown);outline:none">
+          <button onclick="logTime('${p.id}')" style="background:var(--gold);color:var(--cream);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;white-space:nowrap">+ Log</button>
+        </div>
+        ${timeLog.length ? `
+        <div style="font-size:11px;color:var(--stone);margin-bottom:6px">
+          ${timeLog.map((e,i)=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--sand)">
+            <span style="color:var(--mocha)">${e.note||'—'}</span>
+            <span style="color:var(--espresso);font-weight:600;margin-left:8px;white-space:nowrap">${fmtTime(e.mins)} <button onclick="removeTimeLog('${p.id}',${i})" style="background:none;border:none;color:var(--stone);cursor:pointer;font-size:13px;padding:0 0 0 4px">×</button></span>
+          </div>`).join('')}
+        </div>
+        <div style="font-size:11px;font-weight:600;color:var(--dark-brown);text-align:right">Total: ${fmtTime(totalMins)}</div>` 
+        : `<div style="font-size:12px;color:var(--stone);text-align:center;padding:4px 0">No time logged yet</div>`}
+      </div>
+    </div>` : (timeLog.length ? `
+    <div class="field-row">
+      <div class="field-label">⏱ Haley's Time Log</div>
+      <div style="background:var(--cream);border:1px solid var(--sand);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--stone)">
+        ${timeLog.map(e=>`
+        <div style="padding:5px 0;border-bottom:1px solid var(--sand)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <span style="color:var(--mocha);flex:1">${e.note||'—'}</span>
+            <span style="color:var(--espresso);font-weight:600;margin-left:8px;white-space:nowrap">${fmtTime(e.mins)}</span>
+          </div>
+          <div style="font-size:10px;color:var(--stone);margin-top:2px">Logged ${e.date||''}${e.time ? ' at ' + e.time : ''}</div>
+        </div>`).join('')}
+        <div style="font-size:12px;font-weight:700;color:var(--dark-brown);text-align:right;margin-top:6px;padding-top:4px">Total: ${fmtTime(totalMins)}</div>
+      </div>
+    </div>` : '');
+
+  // ── Caption: Dana only ──
+  const captionSection = !isHaley ? `
+    <div class="field-row">
+      <div class="field-label">Caption</div>
+      ${captionEditable}
+    </div>` : '';
+
+  return `
+<div class="post-card" id="card-${p.id}">
+  <div class="card-head" onclick="toggleCard('${p.id}')">
+    <div class="card-date"><span class="date-day">${day}</span><span class="date-mo">${moShort}</span></div>
+    <div class="card-info">
+      <div class="card-title-row">
+        <div class="title-edit-wrap" onclick="event.stopPropagation()">
+          <input class="title-editable" value="${p.title}" 
+            onblur="updateField('${p.id}','title',this.value)"
+            title="Tap to edit title">
+          <span class="title-edit-icon">✏️</span>
+        </div>
+        <div class="owner-dot ${ownerDot}" title="${ownerLabel}" style="flex-shrink:0"></div>
+      </div>
+      <div class="card-tags">
+        <span class="tag ${fTag}">${p.format}</span>
+        ${pillarTag}
+        ${isHaley ? `<span style="font-size:9px;font-weight:600;letter-spacing:0.05em;padding:2px 7px;border-radius:8px;background:${isOverdue ? 'rgba(184,64,64,0.1)' : 'rgba(184,194,199,0.25)'};color:${isOverdue ? '#B84040' : '#594E42'}">${isOverdue ? '⚠️ ' : ''}Due ${dueDateStr}</span>` : ''}
+        ${(!isHaley && totalMins > 0) ? `<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:8px;background:rgba(181,161,135,0.2);color:#594E42">⏱ ${fmtTime(totalMins)}</span>` : ''}
+      </div>
+    </div>
+    <div class="card-right">
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-bottom:5px">
+        ${!isHaley ? `<div style="position:relative">
+          <button onclick="event.stopPropagation();toggleCardMenu('${p.id}')" id="menu-btn-${p.id}"
+            style="background:none;border:none;color:var(--grullo);font-size:20px;cursor:pointer;padding:0 3px;line-height:1;letter-spacing:2px">⋯</button>
+          <div id="card-menu-${p.id}" style="display:none;position:absolute;right:0;top:24px;background:#FCFAF5;border:1px solid #D1B5AB;border-radius:12px;box-shadow:0 4px 16px rgba(89,78,66,0.15);z-index:200;min-width:140px;overflow:hidden">
+            <button onclick="event.stopPropagation();duplicatePost('${p.id}')"
+              style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:11px 14px;font-family:'DM Sans',sans-serif;font-size:13px;color:#594E42;cursor:pointer;text-align:left;border-bottom:1px solid #D1B5AB">
+              <span>⧉</span> Duplicate
+            </button>
+            <button onclick="event.stopPropagation();confirmDelete('${p.id}')" id="del-btn-${p.id}"
+              style="display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:11px 14px;font-family:'DM Sans',sans-serif;font-size:13px;color:#B84040;cursor:pointer;text-align:left">
+              <span>🗑</span> Delete
+            </button>
+            <div id="del-confirm-${p.id}" style="display:none;padding:12px 14px;border-top:1px solid #D1B5AB">
+              <div style="font-size:12px;color:#594E42;margin-bottom:10px;font-weight:500;line-height:1.4">Delete this post?<br><span style="font-weight:400;color:#B5A187">This can't be undone.</span></div>
+              <div style="display:flex;gap:6px">
+                <button onclick="event.stopPropagation();deletePost('${p.id}')"
+                  style="flex:1;background:#B84040;color:white;border:none;border-radius:8px;padding:7px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer">Delete</button>
+                <button onclick="event.stopPropagation();cancelDelete('${p.id}')"
+                  style="flex:1;background:#D1B5AB;color:#594E42;border:none;border-radius:8px;padding:7px;font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>` : ''}
+      </div>
+      <span class="status-btn ${sCls2}" style="margin-bottom:4px">${sLabel2.trim()}</span>
+      <span class="card-chevron" id="chev-${p.id}">▾</span>
+    </div>
+  </div>
+  <div class="card-body" id="body-${p.id}">
+    <div class="cb-divider"></div>
+    ${dueDateBadge}
+    ${isHaley ? haleyStatusSelect : danaStatusSelect}
+    ${isHaley ? '' : ownerEditor}
+    ${!isHaley ? `
+    <div style="display:flex;gap:8px">
+      <div class="field-row" style="flex:1">
+        <div class="field-label">Format</div>
+        <select class="status-select" onchange="updateField('${p.id}','format',this.value);rerenderCard('${p.id}')">
+          <option${p.format==='Photo Reel'?' selected':''}>Photo Reel</option>
+          <option${p.format==='Video Reel'?' selected':''}>Video Reel</option>
+          <option${p.format==='Carousel'?' selected':''}>Carousel</option>
+          <option${p.format==='Talking Reel'?' selected':''}>Talking Reel</option>
+        </select>
+      </div>
+      <div class="field-row" style="flex:1">
+        <div class="field-label">Pillar</div>
+        <select class="status-select" onchange="updateField('${p.id}','pillar',this.value);rerenderCard('${p.id}')">
+          <option value="p1"${p.pillar==='p1'?' selected':''}>SF Experience</option>
+          <option value="p2"${p.pillar==='p2'?' selected':''}>Authority</option>
+        </select>
+      </div>
+    </div>` : ''}
+    ${sharedNotes}
+    ${privateNotes}
+    ${timeSection}
+    ${captionSection}
+    <div class="field-row">
+      <div class="field-label">Asset Links
+        <button class="field-edit-btn" onclick="openLinkModal('${p.id}')">＋ Add Link</button>
+      </div>
+      <div class="link-list" id="links-${p.id}">${linksHtml || '<div style="font-size:12px;color:var(--stone);padding:6px 0">No links yet — tap Add Link to attach a Drive folder, Canva, gallery, or any URL.</div>'}</div>
+    </div>
+  </div>
+</div>`;
+}
+
+// ══════════════════════════════════════════════
+// CARD INTERACTIONS
+// ══════════════════════════════════════════════
+function toggleCard(id) {
+  const body = document.getElementById('body-'+id);
+  const chev = document.getElementById('chev-'+id);
+  const open = body.classList.contains('open');
+  body.classList.toggle('open', !open);
+  body.style.display = !open ? 'block' : 'none';
+  chev.classList.toggle('open', !open);
+}
+
+function expandCaption(id, btn) {
+  const cap = document.getElementById('cap-'+id);
+  const fade = document.getElementById('cfade-'+id);
+  const isCollapsed = cap.style.maxHeight === '120px' || cap.classList.contains('caption-collapsed');
+  cap.style.maxHeight = isCollapsed ? 'none' : '120px';
+  cap.classList.toggle('caption-collapsed', !isCollapsed);
+  if(fade) fade.style.display = isCollapsed ? 'none' : 'block';
+  btn.textContent = isCollapsed ? 'Collapse' : 'Expand';
+}
+
+function copyCaption(id, btn) {
+  const cap = document.getElementById('cap-'+id);
+  const text = cap.value || cap.textContent || '';
+  navigator.clipboard.writeText(text.trim()).then(()=>{
+    btn.textContent='✓ Copied!'; btn.classList.add('copied');
+    toast('Caption copied to clipboard!');
+    setTimeout(()=>{ btn.textContent='📋 Copy Caption'; btn.classList.remove('copied'); },2000);
+  }).catch(()=>{
+    const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.textContent='✓ Copied!'; btn.classList.add('copied');
+    toast('Caption copied!');
+    setTimeout(()=>{ btn.textContent='📋 Copy Caption'; btn.classList.remove('copied'); },2000);
+  });
+}
+
+// ══════════════════════════════════════════════
+// DATA UPDATES
+// ══════════════════════════════════════════════
+function updateField(id, field, value) {
+  const month = currentMonth;
+  const post = posts[month].find(p => p.id === id);
+  if(post) { post[field] = value; saveData(); }
+
+  // Re-render status badge
+  if(field === 'status' || field === 'haleyStatus' || field === 'danaStatus') {
+    const card = document.getElementById('card-'+id);
+    if(card) {
+      const btn = card.querySelector('.status-btn');
+      const map = {
+        published:     ['s-published','Published'],
+        review:        ['s-review','Review'],
+        draft:         ['s-draft','Draft'],
+        scheduled:     ['s-scheduled','Scheduled'],
+        'in-progress': ['s-inprogress','In Progress'],
+        uploaded:      ['s-uploaded','Uploaded ✓']
+      };
+      const [cls, label] = map[value]||['s-draft','Draft'];
+      btn.className = 'status-btn ' + cls;
+      btn.textContent = label;
+    }
+    // Notify Dana only when Haley marks Content Uploaded
+    if((field === 'haleyStatus' || field === 'status') && currentRole === 'haley' && value === 'uploaded') {
+      setTimeout(() => notifyDana(post, value), 300);
+    }
+  }
+}
+
+function rerenderCard(postId) {
+  const post = posts[currentMonth].find(p => p.id === postId);
+  if(!post) return;
+  const wasOpen = document.getElementById('body-'+postId)?.classList.contains('open');
+  document.getElementById('card-'+postId).outerHTML = renderCard(post);
+  if(wasOpen) { const b=document.getElementById('body-'+postId); b.classList.add('open'); b.style.display='block'; document.getElementById('chev-'+postId)?.classList.add('open'); }
+}
+
+function logTime(postId) {
+  const minsInput = document.getElementById('time-mins-'+postId);
+  const noteInput = document.getElementById('time-note-'+postId);
+  const mins = parseInt(minsInput.value);
+  const note = noteInput.value.trim();
+  if(!mins || mins < 1) { toast('Enter minutes worked'); return; }
+  const post = posts[currentMonth].find(p => p.id === postId);
+  if(!post) return;
+  if(!post.timeLog) post.timeLog = [];
+  const _now = new Date();
+  post.timeLog.push({ mins, note, date: _now.toLocaleDateString('en',{month:'short',day:'numeric'}), time: _now.toLocaleTimeString('en',{hour:'numeric',minute:'2-digit',hour12:true}) });
+  saveData();
+  minsInput.value = '';
+  noteInput.value = '';
+  // Re-render just this card
+  const card = document.getElementById('card-'+postId);
+  const wasOpen = document.getElementById('body-'+postId)?.classList.contains('open');
+  card.outerHTML = renderCard(post);
+  if(wasOpen) { const b=document.getElementById('body-'+postId); b.classList.add('open'); b.style.display='block'; document.getElementById('chev-'+postId)?.classList.add('open'); }
+  toast('Time logged!');
+}
+
+function removeTimeLog(postId, idx) {
+  const post = posts[currentMonth].find(p => p.id === postId);
+  if(!post || !post.timeLog) return;
+  post.timeLog.splice(idx, 1);
+  saveData();
+  const wasOpen = document.getElementById('body-'+postId)?.classList.contains('open');
+  document.getElementById('card-'+postId).outerHTML = renderCard(post);
+  if(wasOpen) { const b=document.getElementById('body-'+postId); b.classList.add('open'); b.style.display='block'; document.getElementById('chev-'+postId)?.classList.add('open'); }
+}
+
+
+function openNoteEditor(postId, field, title) {
+  const post = posts[currentMonth].find(p => p.id === postId);
+  if(!post) return;
+  // Remove existing overlay if any
+  const existing = document.getElementById('note-overlay');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'note-overlay';
+  overlay.className = 'note-overlay';
+  overlay.innerHTML = `
+    <div class="note-overlay-header">
+      <div class="note-overlay-title">${title}</div>
+      <button class="note-overlay-done" onclick="saveNoteEditor('${postId}','${field}')">Done</button>
+    </div>
+    <textarea id="note-editor-ta" placeholder="Type your note here…">${post[field]||''}</textarea>`;
+  document.body.appendChild(overlay);
+  const ta = document.getElementById('note-editor-ta');
+  setTimeout(() => { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }, 100);
+}
+
+function saveNoteEditor(postId, field) {
+  const ta = document.getElementById('note-editor-ta');
+  if(!ta) return;
+  const value = ta.value;
+  updateField(postId, field, value);
+  const overlay = document.getElementById('note-overlay');
+  if(overlay) overlay.remove();
+  // Re-render card to show updated note
+  const post = posts[currentMonth].find(p => p.id === postId);
+  if(!post) return;
+  const wasOpen = document.getElementById('body-'+postId)?.classList.contains('open');
+  document.getElementById('card-'+postId).outerHTML = renderCard(post);
+  if(wasOpen) { const b=document.getElementById('body-'+postId); b.classList.add('open'); b.style.display='block'; document.getElementById('chev-'+postId)?.classList.add('open'); }
+}
+
+function notifyDana(post, status) {
+  if(status !== 'uploaded') return;
+  launchConfetti();
+  toast('🎉 Content uploaded! Great work, Haley!', 3000);
+}
+
+function launchConfetti() {
+  const colors = ['#A1786B','#B8C2C7','#B5A187','#594E42','#D1B5AB','#FCFAF5'];
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:9999;overflow:hidden';
+  document.body.appendChild(container);
+  for(let i = 0; i < 80; i++) {
+    const piece = document.createElement('div');
+    const size = Math.random() * 8 + 5;
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const startX = Math.random() * 100;
+    const delay = Math.random() * 0.8;
+    const duration = Math.random() * 1.5 + 1.5;
+    const rotation = Math.random() * 360;
+    const isCircle = Math.random() > 0.5;
+    piece.style.cssText = `position:absolute;top:-20px;left:${startX}%;width:${size}px;height:${size}px;background:${color};border-radius:${isCircle?'50%':'2px'};animation:confettiFall ${duration}s ${delay}s ease-in forwards;transform:rotate(${rotation}deg)`;
+    container.appendChild(piece);
+  }
+  if(!document.getElementById('confetti-style')) {
+    const style = document.createElement('style');
+    style.id = 'confetti-style';
+    style.textContent = '@keyframes confettiFall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(110vh) rotate(720deg);opacity:0}}';
+    document.head.appendChild(style);
+  }
+  setTimeout(() => container.remove(), 3500);
+}
+
+// ══════════════════════════════════════════════
+// LINK MODAL
+// ══════════════════════════════════════════════
+let activeLinkPostId = null;
+let activeLinkType = 'drive';
+
+function openLinkModal(postId) {
+  activeLinkPostId = postId;
+  activeLinkType = 'drive';
+  document.getElementById('link-label').value = '';
+  document.getElementById('link-url').value = '';
+  document.querySelectorAll('.link-type-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.link-type-btn')[0].classList.add('selected');
+  document.getElementById('link-modal').classList.add('open');
+}
+function closeLinkModal() {
+  document.getElementById('link-modal').classList.remove('open');
+}
+function selectLinkType(type, btn) {
+  activeLinkType = type;
+  document.querySelectorAll('.link-type-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+function saveLink() {
+  const label = document.getElementById('link-label').value.trim();
+  const url = document.getElementById('link-url').value.trim();
+  if(!label || !url) { toast('Please fill in both label and URL'); return; }
+  const post = posts[currentMonth].find(p => p.id === activeLinkPostId);
+  if(!post) return;
+  if(!post.links) post.links = [];
+  post.links.push({ label, url, type: activeLinkType });
+  saveData();
+  refreshLinks(activeLinkPostId, post.links);
+  closeLinkModal();
+  toast('Link added!');
+}
+function showToast(message) {
+  const existing = document.getElementById('sync-toast');
+  if(existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.id = 'sync-toast';
+  toast.textContent = message;
+  toast.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#2B2E2E;color:#FCFAF5;padding:10px 20px;border-radius:20px;font-size:13px;font-family:"DM Sans",sans-serif;z-index:9999;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.2)';
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+function showConfirmDelete(message, onConfirm) {
+  // Remove any existing confirm overlay
+  const existing = document.getElementById('confirm-overlay');
+  if(existing) existing.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'confirm-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(43,46,46,0.45);z-index:8000;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `<div style="background:#FCFAF5;border-radius:18px;padding:24px 20px;max-width:280px;width:100%;text-align:center;box-shadow:0 8px 32px rgba(89,78,66,0.2)">
+    <div style="font-size:22px;margin-bottom:8px">🗑</div>
+    <div style="font-size:14px;font-weight:600;color:#594E42;margin-bottom:6px">${message}</div>
+    <div style="font-size:12px;color:#B5A187;margin-bottom:18px">This can't be undone.</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="document.getElementById('confirm-overlay').remove()" style="flex:1;background:#D1B5AB;color:#594E42;border:none;border-radius:12px;padding:10px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">Cancel</button>
+      <button id="confirm-yes" style="flex:1;background:#B84040;color:white;border:none;border-radius:12px;padding:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer">Delete</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('confirm-yes').onclick = () => { overlay.remove(); onConfirm(); };
+  overlay.addEventListener('click', e => { if(e.target === overlay) overlay.remove(); });
+}
+
+function removeLink(postId, linkIndex) {
+  const post = posts[currentMonth].find(p => p.id === postId);
+  if(!post) return;
+  const link = post.links[linkIndex];
+  const name = link ? link.label || 'this link' : 'this link';
+  showConfirmDelete('Remove "' + name + '"?', () => {
+    post.links.splice(linkIndex, 1);
+    saveData();
+    refreshLinks(postId, post.links);
+  });
+}
+function refreshLinks(postId, links) {
+  const container = document.getElementById('links-'+postId);
+  if(!container) return;
+  const linkIcons = {drive:'📁 li-drive', canva:'🎨 li-canva', gallery:'📸 li-gallery', doc:'📋 li-doc', dropbox:'📦 li-drive', ig:'📱 li-gallery'};
+  if(!links.length) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--stone);padding:6px 0">No links yet — tap Add Link to attach a Drive folder, Canva file, Dropbox, gallery, or any URL.</div>';
+    return;
+  }
+  container.innerHTML = links.map((l,li) => {
+    const [icon, cls] = (linkIcons[l.type]||'🔗 li-doc').split(' ');
+    return `<a href="${l.url}" target="_blank" class="link-item" style="text-decoration:none"><div class="link-icon ${cls}">${icon}</div><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.label}</span><button onclick="event.preventDefault();removeLink('${postId}',${li})" style="background:none;border:none;color:var(--stone);font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;margin-left:4px">×</button></a>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════
+// ADD / DELETE POSTS
+// ══════════════════════════════════════════════
+function openModal() {
+  document.getElementById('add-modal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('add-modal').classList.remove('open');
+}
+function saveNewPost() {
+  const date = document.getElementById('new-date').value;
+  const title = document.getElementById('new-title').value.trim();
+  if(!date || !title) { toast('Please fill in date and title'); return; }
+  const newPost = {
+    id: 'custom-' + Date.now(),
+    date, title,
+    format: document.getElementById('new-format').value,
+    owner: document.getElementById('new-owner').value,
+    pillar: document.getElementById('new-pillar').value,
+    status: 'draft',
+    notes: document.getElementById('new-notes').value,
+    caption: document.getElementById('new-caption').value,
+    links: [], files: []
+  };
+  if(!posts[currentMonth]) posts[currentMonth] = [];
+  posts[currentMonth].push(newPost);
+  saveData();
+  closeModal();
+  renderCalendar();
+  toast('Post added to ' + MONTH_LABELS[currentMonth]);
+  // Clear form
+  ['new-date','new-title','new-notes','new-caption'].forEach(id => document.getElementById(id).value = '');
+}
+function confirmDelete(id) {
+  // hide the delete button row, show confirm panel
+  document.getElementById('del-btn-' + id).style.display = 'none';
+  document.getElementById('del-confirm-' + id).style.display = 'block';
+}
+function cancelDelete(id) {
+  document.getElementById('del-confirm-' + id).style.display = 'none';
+  document.getElementById('del-btn-' + id).style.display = 'flex';
+  closeAllCardMenus();
+}
+function deletePost(id) {
+  posts[currentMonth] = posts[currentMonth].filter(p => p.id !== id);
+  saveData();
+  renderCalendar();
+  toast('Post deleted');
+}
+
+// ── 3-dot card menu ──
+function toggleCardMenu(id) {
+  const menu = document.getElementById('card-menu-' + id);
+  const isOpen = menu.style.display === 'block';
+  closeAllCardMenus();
+  if (!isOpen) menu.style.display = 'block';
+}
+function closeAllCardMenus() {
+  document.querySelectorAll('[id^="card-menu-"]').forEach(m => m.style.display = 'none');
+}
+document.addEventListener('click', closeAllCardMenus);
+
+// ── Caption expand/collapse ──
+function autoGrow(el) {
+  // only grow if expanded
+  if (el.dataset.expanded === 'true') {
+    el.style.maxHeight = 'none';
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }
+}
+function toggleCaption(id, btn) {
+  const ta = document.getElementById('cap-' + id);
+  const expanded = ta.dataset.expanded === 'true';
+  if (expanded) {
+    ta.dataset.expanded = 'false';
+    ta.style.maxHeight = '66px';
+    ta.style.height = '66px';
+    ta.style.overflow = 'hidden';
+    btn.textContent = 'Show more';
+  } else {
+    ta.dataset.expanded = 'true';
+    ta.style.maxHeight = 'none';
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+    ta.style.overflow = 'hidden';
+    btn.textContent = 'Show less';
+  }
+}
+
+// ── Duplicate post ──
+function duplicatePost(id) {
+  closeAllCardMenus();
+  const original = posts[currentMonth].find(p => p.id === id);
+  if (!original) return;
+  const copy = JSON.parse(JSON.stringify(original));
+  copy.id = 'p' + Date.now();
+  copy.title = copy.title + ' (copy)';
+  copy.status = 'draft';
+  posts[currentMonth].push(copy);
+  saveData();
+  renderCalendar();
+  toast('Post duplicated');
+}
+
+// ══════════════════════════════════════════════
+// ANALYTICS
+// ══════════════════════════════════════════════
+function buildAnalytics() {
+  if(currentRole !== 'dana') return;
+  const container = document.getElementById('analytics-content');
+  const monthPosts = (posts[currentMonth]||[]).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  let html = '';
+  monthPosts.forEach(p => {
+    const [_sy,_sm,_sd] = p.date.split('-').map(Number); const d = new Date(_sy, _sm-1, _sd);
+    const dat = analytics[p.id] || {reach:'',saves:'',follows:'',profile:''};
+    const statusMap = {published:'s-published Published',review:'s-review Needs Review',draft:'s-draft Draft',scheduled:'s-scheduled Scheduled','in-progress':'s-inprogress In Progress',uploaded:'s-uploaded Content Uploaded'};
+    const _bs = isHaley ? (p.haleyStatus||p.status||'draft') : (p.danaStatus||p.status||'draft');
+    const [sCls, sLabel] = (statusMap[_bs]||'s-draft Draft').split(' ');
+    html += `
+    <div class="analytics-card">
+      <div class="ac-head" style="cursor:pointer" onclick="jumpToPost('${p.id}')">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+          <div>
+            <div class="ac-title">${p.title}</div>
+            <div class="ac-meta">${d.toLocaleDateString('en',{month:'short',day:'numeric'})} · ${p.format} · ${p.owner==='dana'?'Dana':p.owner==='haley'?'Haley':'Both'}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">
+            <span class="status-btn ${sCls.trim()}" style="font-size:8px">${sLabel.trim()}</span>
+            <span style="font-size:10px;color:var(--blue-d);white-space:nowrap">View post →</span>
+          </div>
+        </div>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric"><input type="number" placeholder="—" value="${dat.reach}" oninput="saveMetric('${p.id}','reach',this.value)" inputmode="numeric"><div class="metric-label">Reach</div></div>
+        <div class="metric"><input type="number" placeholder="—" value="${dat.saves}" oninput="saveMetric('${p.id}','saves',this.value)" inputmode="numeric"><div class="metric-label">Saves</div></div>
+        <div class="metric"><input type="number" placeholder="—" value="${dat.follows}" oninput="saveMetric('${p.id}','follows',this.value)" inputmode="numeric"><div class="metric-label">Follows</div></div>
+        <div class="metric"><input type="number" placeholder="—" value="${dat.profile}" oninput="saveMetric('${p.id}','profile',this.value)" inputmode="numeric"><div class="metric-label">Profile</div></div>
+      </div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+function jumpToPost(postId) {
+  // Switch to calendar view
+  switchView('calendar');
+  // Find which month this post is in
+  let found = false;
+  for(const [mo, moPosts] of Object.entries(posts)) {
+    if(moPosts.find(p => p.id === postId)) {
+      if(mo !== currentMonth) {
+        currentMonth = mo;
+        // Update month tab UI
+        document.querySelectorAll('.month-tab').forEach(t => {
+          const moMatch = t.getAttribute('onclick')?.match(/'(\w+)'/);
+          if(moMatch) t.classList.toggle('active', moMatch[1] === mo);
+        });
+        renderCalendar();
+      }
+      found = true;
+      break;
+    }
+  }
+  // Open the card and scroll to it
+  setTimeout(() => {
+    const card = document.getElementById('card-'+postId);
+    if(card) {
+      // Open body if not already open
+      const body = document.getElementById('body-'+postId);
+      const chev = document.getElementById('chev-'+postId);
+      if(body && !body.classList.contains('open')) {
+        body.classList.add('open');
+        body.style.display = 'block';
+        chev?.classList.add('open');
+      }
+      card.scrollIntoView({ behavior:'smooth', block:'center' });
+      // Briefly highlight
+      card.style.outline = '2px solid var(--gold)';
+      setTimeout(() => { card.style.outline = ''; }, 1800);
+    }
+  }, 150);
+}
+function saveMetric(id, field, val) {
+  if(!analytics[id]) analytics[id] = {};
+  analytics[id][field] = val;
+  saveAnalytics();
+}
+
+// ══════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════
+function toast(msg, duration = 2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=>{ el.classList.remove('show'); el.innerHTML=''; }, duration);
+}
+
+// ══════════════════════════════════════════════
+// SCROLL TOP
+// ══════════════════════════════════════════════
+window.addEventListener('scroll', () => {
+  document.getElementById('scrollTop').classList.toggle('vis', window.scrollY > 300);
+});
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+loadData(); // preload local data on init
+// All views hidden until role selected
+document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+</script>
+</body>
+</html>E html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ascend Together Co. | Content Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --isabellina:  #FCFAF5;
+  --silver-pink: #D1B5AB;
+  --grullo:      #B5A187;
+  --silver-sand: #B8C2C7;
+  --burnished:   #A1786B;
+  --umber:       #594E42;
+  --dark-brown:  #3D2B1F;
+  /* aliases */
+  --cream:   #FCFAF5;
+  --warm:    #FCFAF5;
+  --sand:    #D1B5AB;
+  --stone:   #B5A187;
+  --mocha:   #B5A187;
+  --espresso:#594E42;
+  --gold:    #A1786B;
+  --gold-l:  #D1B5AB;
+  --blue:    #B8C2C7;
+  --blue-d:  #8A9FA8;
+  --silver:  #B8C2C7;
+  --shadow:  rgba(89,78,66,0.14);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-height:100vh;overflow-x:hidden;font-size:14px}
+
+/* ── ROLE GATE ── */
+#role-gate{position:fixed;inset:0;background:#594E42;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px}
+.rg-logo{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;color:#FCFAF5;letter-spacing:0.06em;margin-bottom:6px;text-align:center}
+.rg-logo em{font-style:italic}
+.rg-sub{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#D1B5AB;margin-bottom:48px;text-align:center}
+.rg-label{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:#D1B5AB;margin-bottom:16px;text-align:center}
+.rg-btns{display:flex;flex-direction:column;gap:12px;width:100%;max-width:280px}
+.rg-btn{padding:16px;border:none;border-radius:14px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s;text-align:center}
+.rg-btn-dana{background:#B8C2C7;color:#594E42}
+.rg-btn-haley{background:#A1786B;color:#FCFAF5}
+.rg-btn:active{opacity:0.85;transform:scale(0.98)}
+.rg-btn-name{font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;display:block;margin-bottom:2px}
+.rg-btn-role{font-size:11px;opacity:0.8;letter-spacing:0.06em}
+
+/* ── HEADER ── */
+.header{background:#3D2B1F;padding:14px 16px 0;position:sticky;top:0;z-index:100;border-bottom:1px solid rgba(161,120,107,0.25)}
+.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.brand{font-family:'Cormorant Garamond',serif;font-size:19px;font-weight:300;color:#FCFAF5;letter-spacing:0.04em}
+.brand em{font-style:italic}
+.header-right{display:flex;align-items:center;gap:8px}
+.role-pill{font-size:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;padding:4px 10px;border-radius:20px;cursor:pointer}
+.role-pill-dana{background:rgba(184,194,199,0.25);color:#B8C2C7;border:1px solid rgba(184,194,199,0.4)}
+.role-pill-haley{background:rgba(161,120,107,0.25);color:#D1B5AB;border:1px solid rgba(161,120,107,0.4)}
+.month-tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;padding-bottom:0}
+.month-tabs::-webkit-scrollbar{display:none}
+.month-tab{background:transparent;border:none;color:rgba(252,250,245,0.4);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:400;letter-spacing:0.06em;padding:8px 16px 10px;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;white-space:nowrap}
+.month-tab.active{color:#FCFAF5;border-bottom-color:#A1786B}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:#3D2B1F;border-top:1px solid rgba(161,120,107,0.2);display:flex;padding:8px 0 max(10px,env(safe-area-inset-bottom));z-index:100}
+.bnav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;cursor:pointer;padding:2px;color:#B5A187;transition:color 0.2s}
+.bnav-btn.active{color:#FCFAF5}
+.bnav-icon{font-size:19px;line-height:1}
+.bnav-label{font-size:9px;letter-spacing:0.07em;font-weight:500;text-transform:uppercase}
+
+/* ── VIEWS ── */
+.view{display:none;padding:16px 14px 100px}
+.view.active{display:block}
+
+/* ── SECTION LABEL ── */
+.sec-label{font-family:'Cormorant Garamond',serif;font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#A1786B;margin:20px 0 10px;display:flex;align-items:center;gap:8px}
+.sec-label:first-child{margin-top:4px}
+.sec-label::after{content:'';flex:1;height:1px;background:#D1B5AB;opacity:0.7}
+
+/* ── POST CARD ── */
+.post-card{background:#FCFAF5;border-radius:16px;margin-bottom:10px;border:1px solid #D1B5AB;overflow:hidden}
+.card-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;position:relative}
+.card-date{background:#B8C2C7;border-radius:10px;padding:6px 8px;text-align:center;min-width:40px;flex-shrink:0}
+.date-day{font-family:'Cormorant Garamond',serif;font-size:21px;font-weight:300;line-height:1;display:block;color:#594E42}
+.date-mo{font-size:8px;letter-spacing:0.12em;text-transform:uppercase;color:#594E42;opacity:0.7;display:block;margin-top:1px}
+.card-info{flex:1;min-width:0}
+.card-title-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.card-title{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:#594E42;line-height:1.2;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.owner-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.owner-dot-dana{background:#B8C2C7}
+.owner-dot-haley{background:#A1786B}
+.owner-dot-both{background:#B5A187}
+.card-tags{display:flex;gap:5px;flex-wrap:wrap}
+.tag{font-size:9px;font-weight:500;letter-spacing:0.07em;padding:2px 7px;border-radius:8px;text-transform:uppercase}
+.tag-reel{background:#EDE8E2;color:#594E42}
+.tag-carousel{background:#E5ECED;color:#4A6A72}
+.tag-talking{background:#EDE8E2;color:#6B5040}
+.tag-video{background:#EAE8E2;color:#594E42}
+.tag-p1{background:#F0EAE7;color:#A1786B}
+.tag-p2{background:#E8ECEE;color:#5A7A84}
+.card-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.status-btn{border:none;border-radius:10px;font-size:9px;font-weight:600;letter-spacing:0.03em;text-transform:uppercase;padding:3px 8px;cursor:pointer;white-space:nowrap;transition:all 0.15s;text-align:center;display:block}
+.s-published{background:#D8EBD8;color:#2A5C2A}
+.s-review{background:#F5E0DC;color:#7A3828}
+.s-draft{background:#EDE8E2;color:#594E42}
+.s-scheduled{background:#DDE8EC;color:#2A4E5C}
+.s-inprogress{background:#EDE9E4;color:#7A5A28}
+.s-uploaded{background:#D8EBD8;color:#2A5C2A}
+.card-chevron{font-size:12px;color:#B5A187;transition:transform 0.2s;margin-top:2px}
+.card-chevron.open{transform:rotate(180deg)}
+
+/* ── CARD BODY ── */
+.card-body{display:none;padding:0 14px 14px}
+.card-body.open{display:block}
+.cb-divider{height:1px;background:#D1B5AB;opacity:0.5;margin-bottom:14px}
+.field-row{margin-bottom:12px}
+.field-label{font-size:9px;font-weight:600;letter-spacing:0.13em;text-transform:uppercase;color:#B5A187;margin-bottom:5px;display:flex;align-items:center;justify-content:space-between}
+.field-edit-btn{font-size:10px;color:#A1786B;font-weight:500;letter-spacing:0.04em;background:none;border:none;cursor:pointer;padding:0;text-transform:none}
+.editable-text{font-size:13px;line-height:1.65;color:#594E42;background:#F5F2EC;border:1px solid #D1B5AB;border-radius:10px;padding:10px 12px;width:100%;resize:vertical;font-family:'DM Sans',sans-serif;min-height:70px;outline:none;transition:border-color 0.2s}
+.editable-text:focus{border-color:#A1786B}
+.editable-text[readonly]{background:transparent;border-color:transparent;padding:0;min-height:unset;resize:none;cursor:default}
+.editable-input{font-size:13px;color:#594E42;background:#F5F2EC;border:1px solid #D1B5AB;border-radius:10px;padding:8px 12px;width:100%;font-family:'DM Sans',sans-serif;outline:none;transition:border-color 0.2s}
+.editable-input:focus{border-color:#A1786B}
+.editable-input[readonly]{background:transparent;border-color:transparent;padding:0;cursor:default}
+.caption-wrap{position:relative}
+.caption-collapsed{max-height:120px;overflow:hidden}
+.caption-fade{position:absolute;bottom:32px;left:0;right:0;height:36px;background:linear-gradient(transparent,#F5F2EC);pointer-events:none}
+.btn{display:flex;align-items:center;justify-content:center;gap:5px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:8px 12px;cursor:pointer;transition:all 0.15s;text-decoration:none}
+.btn-copy{background:#A1786B;color:#FCFAF5;flex:1}
+.btn-copy.copied{background:#6A9E78;color:white}
+.btn-sm{background:#EDE8E2;color:#594E42;padding:8px 14px}
+.status-select{width:100%;background:#F5F2EC;border:1px solid #D1B5AB;border-radius:10px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:13px;color:#594E42;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23B5A187'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.owner-select{width:100%;background:#F5F2EC;border:1px solid #D1B5AB;border-radius:10px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:13px;color:#594E42;outline:none;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23B5A187'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.link-list{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.link-item{display:flex;align-items:center;gap:10px;background:#F5F2EC;border-radius:10px;padding:8px 10px;text-decoration:none;color:#594E42;font-size:12px;font-weight:500;transition:background 0.15s;border:1px solid #D1B5AB}
+.link-item:active{background:#D1B5AB}
+.link-icon{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.li-drive{background:rgba(184,194,199,0.4)}
+.li-canva{background:rgba(209,181,171,0.35)}
+.li-gallery{background:rgba(184,194,199,0.3)}
+.li-doc{background:rgba(181,161,135,0.25)}
+.add-post-btn{width:100%;background:transparent;border:1.5px dashed #D1B5AB;border-radius:14px;padding:14px;font-family:'DM Sans',sans-serif;font-size:13px;color:#B5A187;cursor:pointer;margin-bottom:10px;transition:all 0.2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.add-post-btn:active{border-color:#A1786B;color:#A1786B}
+
+/* ── ANALYTICS ── */
+.analytics-card{background:#FCFAF5;border-radius:14px;margin-bottom:10px;border:1px solid #D1B5AB;overflow:hidden}
+.ac-head{padding:12px 14px;border-bottom:1px solid #D1B5AB}
+.ac-title{font-family:'Cormorant Garamond',serif;font-size:15px;font-weight:600;color:#594E42}
+.ac-meta{font-size:10px;color:#B5A187;margin-top:2px}
+.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr)}
+.metric{padding:10px 6px;text-align:center;border-right:1px solid #D1B5AB}
+.metric:last-child{border-right:none}
+.metric input{width:100%;border:none;background:transparent;font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:400;color:#594E42;text-align:center;outline:none;-webkit-appearance:none}
+.metric input::placeholder{color:#B5A187;font-size:16px}
+.metric-label{font-size:8px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#B5A187;margin-top:1px}
+
+/* ── QUICK LINKS ── */
+.ql-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.ql-card{background:#FCFAF5;border:1px solid #D1B5AB;border-radius:14px;padding:14px 12px;text-decoration:none;display:block;transition:all 0.15s}
+.ql-card:active{background:#D1B5AB;transform:scale(0.98)}
+.ql-icon{font-size:20px;margin-bottom:7px;display:block}
+.ql-name{font-family:'Cormorant Garamond',serif;font-size:14px;font-weight:600;color:#594E42;line-height:1.2;margin-bottom:2px}
+.ql-desc{font-size:10px;color:#B5A187}
+
+/* ── CAMPAIGN ── */
+.camp-card{background:#FCFAF5;border:1px solid #D1B5AB;border-radius:14px;padding:16px 14px;margin-bottom:10px}
+.camp-title{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:#594E42;margin-bottom:10px}
+.kpi-row{display:flex;gap:8px;margin-bottom:10px}
+.kpi{flex:1;background:#F5F2EC;border-radius:10px;padding:10px 8px;text-align:center}
+.kpi-n{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:300;color:#594E42;line-height:1;display:block}
+.kpi-l{font-size:9px;color:#B5A187;letter-spacing:0.08em;text-transform:uppercase;margin-top:3px}
+.progress-bar{height:5px;background:#D1B5AB;border-radius:10px;overflow:hidden;margin:10px 0 5px}
+.progress-fill{height:100%;background:linear-gradient(90deg,#A1786B,#D1B5AB);border-radius:10px}
+.progress-label{font-size:11px;color:#B5A187}
+.pillar{background:#F5F2EC;border-radius:10px;padding:12px;margin-bottom:8px}
+.pillar-title{font-family:'Cormorant Garamond',serif;font-size:14px;font-weight:600;color:#594E42;margin-bottom:5px}
+.pillar-body{font-size:11px;color:#B5A187;line-height:1.6}
+.ul-list{list-style:none;margin-top:7px}
+.ul-list li{font-size:11px;color:#B5A187;padding:3px 0 3px 12px;position:relative;line-height:1.5}
+.ul-list li::before{content:'—';position:absolute;left:0;color:#A1786B;font-size:9px;top:5px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:82px;left:50%;transform:translateX(-50%) translateY(16px);background:#594E42;color:#FCFAF5;font-size:12px;font-weight:500;padding:12px 16px;border-radius:14px;opacity:0;transition:all 0.25s;pointer-events:none;z-index:999;white-space:nowrap;max-width:90vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(89,78,66,0.55);z-index:500;display:none;align-items:flex-end}
+.modal-overlay.open{display:flex}
+.modal{background:#FCFAF5;border-radius:20px 20px 0 0;padding:20px 16px 40px;width:100%;max-height:85vh;overflow-y:auto}
+.modal-title{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600;color:#594E42;margin-bottom:16px}
+.modal-field{margin-bottom:12px}
+.modal-label{font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#B5A187;margin-bottom:5px}
+.modal-input,.modal-select,.modal-textarea{width:100%;background:#F5F2EC;border:1px solid #D1B5AB;border-radius:10px;padding:9px 12px;font-family:'DM Sans',sans-serif;font-size:13px;color:#594E42;outline:none}
+.modal-select{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23B5A187'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.modal-textarea{resize:vertical;min-height:80px}
+.modal-actions{display:flex;gap:8px;margin-top:16px}
+.btn-primary{flex:1;background:#594E42;color:#FCFAF5;border:none;border-radius:12px;padding:13px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer}
+.btn-cancel{background:#D1B5AB;color:#594E42;border:none;border-radius:12px;padding:13px 16px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer}
+
+/* Haley banner */
+.haley-banner{background:rgba(161,120,107,0.08);border:1px solid rgba(161,120,107,0.22);border-radius:14px;padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px}
+.haley-banner-icon{font-size:24px}
+.haley-banner-text{font-size:12px;color:#B5A187;line-height:1.5}
+.haley-banner-text strong{color:#594E42;font-size:13px;display:block;margin-bottom:2px}
+
+/* ── SCROLL TOP ── */
+.scroll-top{position:fixed;bottom:82px;right:14px;background:#594E42;color:#FCFAF5;border:none;border-radius:50%;width:38px;height:38px;font-size:16px;cursor:pointer;display:none;align-items:center;justify-content:center;box-shadow:0 3px 12px rgba(89,78,66,0.2);z-index:90}
+.scroll-top.vis{display:flex}
+
+/* ── EDITABLE SECTION LABEL ── */
+.sec-label-edit{outline:none;border-bottom:1px dashed #B5A187;cursor:text;min-width:20px}
+
+/* ── EDITABLE TITLE ── */
+.title-edit-wrap{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.title-editable{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:#594E42;background:transparent;border:none;border-bottom:1px dashed rgba(209,181,171,0.5);outline:none;width:100%;padding:1px 0 2px;cursor:text;-webkit-user-select:text;user-select:text}
+.title-editable:focus{border-bottom:1.5px solid #A1786B;background:rgba(161,120,107,0.05);border-radius:4px;padding:2px 4px}
+.title-edit-icon{font-size:10px;color:#B5A187;flex-shrink:0;opacity:0.5}
+
+/* ── ADD LINK MODAL ── */
+#link-modal .modal{max-height:60vh}
+.link-type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px}
+.link-type-btn{background:#FCFAF5;border:1.5px solid #D1B5AB;border-radius:10px;padding:10px 6px;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;color:#B5A187;cursor:pointer;text-align:center;transition:all 0.15s}
+.link-type-btn.selected{border-color:#A1786B;background:rgba(161,120,107,0.1);color:#594E42}
+.link-type-icon{font-size:18px;display:block;margin-bottom:4px}
+/* Prevent iOS auto-zoom on input focus - only inputs/selects, not textareas */
+@media (max-width: 599px) {
+  input, select { font-size: 16px !important; }
+}
+
+/* Tap-to-edit notes */
+.note-display{font-size:13px;line-height:1.65;color:#594E42;background:#F5F2EC;border:1px solid #D1B5AB;border-radius:10px;padding:10px 12px;min-height:44px;cursor:pointer;position:relative;word-break:break-word}
+.note-display:after{content:'✏️';font-size:11px;position:absolute;bottom:7px;right:10px;opacity:0.45}
+.note-display.empty:after{display:none}
+.note-display.empty{color:#B5A187;font-style:italic}
+/* Full-screen note editor overlay */
+.note-overlay{position:fixed;inset:0;background:#FCFAF5;z-index:9000;display:flex;flex-direction:column;padding:0;-webkit-overflow-scrolling:touch;overflow:hidden}
+.note-overlay-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #D1B5AB;background:#FCFAF5}
+.note-overlay-title{font-family:'Cormorant Garamond',serif;font-size:17px;font-weight:600;color:#594E42}
+.note-overlay-done{background:#594E42;color:#FCFAF5;border:none;border-radius:10px;padding:7px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer}
+.note-overlay textarea{flex:1;border:none;outline:none;padding:16px;font-family:'DM Sans',sans-serif;font-size:16px;line-height:1.7;color:#594E42;background:#FCFAF5;resize:none;width:100%;box-sizing:border-box}
+</style>
+</head>
+<body>
+<iframe name="hidden-save-frame" style="display:none"></iframe>
+
+<!-- ── ROLE GATE ── -->
+<div id="role-gate">
+  <div class="rg-logo">Ascend <em>Together</em> Co.</div>
+  <div class="rg-sub">Content Hub</div>
+  <div class="rg-label">Who are you?</div>
+  <div class="rg-btns">
+    <button class="rg-btn rg-btn-dana" onclick="showPinPrompt()">
+      <span class="rg-btn-name">Dana</span>
+      <span class="rg-btn-role">Strategy · Full Access</span>
+    </button>
+    <button class="rg-btn rg-btn-haley" onclick="setRole('haley')">
+      <span class="rg-btn-name">Haley</span>
+      <span class="rg-btn-role">Creator · My Posts Only</span>
+    </button>
+  </div>
+</div>
+
+<!-- ── PIN OVERLAY ── -->
+<div id="pin-overlay" style="display:none;position:fixed;inset:0;background:rgba(43,46,46,0.55);z-index:10000;align-items:center;justify-content:center">
+  <div style="background:#FCFAF5;border-radius:22px;padding:32px 28px;width:300px;max-width:90vw;text-align:center;box-shadow:0 12px 40px rgba(89,78,66,0.2)">
+    <div style="font-size:28px;margin-bottom:6px">🔒</div>
+    <div style="font-family:'DM Sans',sans-serif;font-size:17px;font-weight:700;color:#2B2E2E;margin-bottom:4px">Dana's Access</div>
+    <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#B5A187;margin-bottom:20px">Enter your PIN to continue</div>
+    <input id="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+      placeholder="••••"
+      style="width:100%;box-sizing:border-box;text-align:center;font-size:24px;letter-spacing:10px;padding:12px 16px;border:2px solid #D1B5AB;border-radius:14px;font-family:'DM Sans',sans-serif;color:#2B2E2E;background:#F5F2EC;outline:none;margin-bottom:10px"
+      onkeydown="if(event.key==='Enter')checkPin()"
+      oninput="clearPinError()">
+    <div id="pin-error" style="font-family:'DM Sans',sans-serif;font-size:12px;color:#B84040;min-height:18px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closePinPrompt()" style="flex:1;background:#D1B5AB;color:#594E42;border:none;border-radius:12px;padding:11px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="checkPin()" style="flex:1;background:#A1786B;color:white;border:none;border-radius:12px;padding:11px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer">Enter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── HEADER ── -->
+<div class="header" id="main-header" style="display:none">
+  <div class="header-top">
+    <div class="brand">Ascend <em>Together</em> Co.</div>
+    <div class="header-right" style="display:flex;align-items:center;gap:8px">
+      <button id="refresh-btn" onclick="refreshData()" style="display:none;background:none;border:1px solid rgba(184,194,199,0.3);border-radius:8px;color:#B8C2C7;font-size:10px;font-family:'DM Sans',sans-serif;padding:4px 8px;cursor:pointer;letter-spacing:0.05em">↻ Refresh</button>
+      <div class="role-pill" id="role-pill" onclick="switchRole()"></div>
+    </div>
+  </div>
+  <div class="month-tabs">
+    <button class="month-tab active" onclick="switchMonth('mar',this)">March</button>
+    <button class="month-tab" onclick="switchMonth('apr',this)">April</button>
+    <button class="month-tab" onclick="switchMonth('may',this)">May</button>
+  </div>
+</div>
+
+<!-- ════════ VIEWS ════════ -->
+<div id="app" style="display:none">
+
+<!-- ── CALENDAR VIEW ── -->
+<div id="view-calendar" class="view active" style="display:none">
+  <!-- Month content rendered by JS -->
+</div>
+
+<!-- ── HALEY CALENDAR VIEW ── -->
+<div id="view-haley-cal" class="view" style="display:none">
+  <!-- Rendered by JS -->
+</div>
+
+<!-- ── ANALYTICS VIEW ── -->
+<div id="view-analytics" class="view" style="display:none">
+  <div id="analytics-content"></div>
+</div>
+
+<!-- ── LINKS VIEW ── -->
+<div id="view-links" class="view" style="display:none">
+  <div id="links-page-content"></div>
+</div>
+
+<!-- ── CAMPAIGN VIEW ── -->
+<div id="view-campaign" class="view" style="display:none">
+
+  <div class="sec-label">Booking Pipeline</div>
+  <div class="camp-card">
+    <div class="camp-title">90-Day Goals</div>
+    <div class="kpi-row">
+      <div class="kpi"><span class="kpi-n">1</span><div class="kpi-l">Booked</div></div>
+      <div class="kpi"><span class="kpi-n">5</span><div class="kpi-l">Target</div></div>
+      <div class="kpi"><span class="kpi-n">12</span><div class="kpi-l">Capacity/yr</div></div>
+      <div class="kpi"><span class="kpi-n">$9k</span><div class="kpi-l">Package</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:20%"></div></div>
+    <div class="progress-label">1 of 5 target bookings · $15k–$20k ideal client budget</div>
+  </div>
+
+  <div class="sec-label">Marketing Split</div>
+  <div class="camp-card">
+    <div class="kpi-row">
+      <div class="kpi" style="background:#EAE4F7"><span class="kpi-n" style="color:#6B5BAD">70%</span><div class="kpi-l">Elopements</div></div>
+      <div class="kpi" style="background:#F7EAE4"><span class="kpi-n" style="color:#AD6B5B">30%</span><div class="kpi-l">Weddings + Eng.</div></div>
+    </div>
+    <div style="font-size:12px;color:var(--mocha)">Primary: San Francisco + Marin. City Hall as ceremony anchor.</div>
+  </div>
+
+  <div class="sec-label">Content Pillars</div>
+  <div class="pillar">
+    <div class="pillar-title">Pillar 1 — SF Experience</div>
+    <div class="pillar-body">Reframes SF from chaotic → cinematic. Builds desire. Shows what's possible with intentional design.</div>
+    <ul class="ul-list"><li>City Hall → Marin arc</li><li>Architecture + coastline contrast</li><li>Six-hour pacing vs rushed coverage</li><li>"SF is underrated" positioning</li></ul>
+  </div>
+  <div class="pillar">
+    <div class="pillar-title">Pillar 2 — Planning Authority</div>
+    <div class="pillar-body">Builds trust. Exposes planning depth. Replaces uncertainty with clarity.</div>
+    <ul class="ul-list"><li>Proposal walkthroughs</li><li>Vendor curation depth</li><li>Budget clarity (no price anchoring)</li><li>"Fully planned in 30 days"</li></ul>
+  </div>
+
+  <div class="sec-label">Core Promise</div>
+  <div class="camp-card">
+    <div style="font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:400;font-style:italic;line-height:1.65;color:var(--espresso)">"We remove the unknowns of eloping in San Francisco and fully plan the experience within 30 days so couples feel confident from day one without managing it themselves."</div>
+  </div>
+
+  <div class="sec-label">Brand QA Checklist</div>
+  <div class="camp-card">
+    <div style="font-size:12px;font-weight:600;color:var(--espresso);margin-bottom:6px">Every post must include at least one:</div>
+    <ul class="ul-list"><li>San Francisco (explicit)</li><li>City Hall (weekly)</li><li>Other SF locations (weekly)</li><li>"Fully planned in 30 days" (weekly)</li></ul>
+    <div style="font-size:12px;font-weight:600;color:var(--espresso);margin:10px 0 6px">Must create:</div>
+    <ul class="ul-list"><li>Relief</li><li>Confidence</li><li>Trust</li></ul>
+  </div>
+
+  <div class="sec-label">Weekly Cadence</div>
+  <div class="camp-card">
+    <ul class="ul-list">
+      <li><strong>Haley:</strong> 2 posts/week (8/mo) — visibility + consistency</li>
+      <li><strong>Dana:</strong> 1 authority reel/week (4/mo)</li>
+      <li><strong>Stories:</strong> 5–6 days/week (Dana leads education)</li>
+    </ul>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- ── BOTTOM NAV ── -->
+<div class="bottom-nav" id="bottom-nav" style="display:none">
+  <button class="bnav-btn active" id="bnav-calendar" onclick="switchView('calendar')"><span class="bnav-icon">📅</span><span class="bnav-label">Calendar</span></button>
+  <button class="bnav-btn" id="bnav-analytics" onclick="switchView('analytics')"><span class="bnav-icon">📈</span><span class="bnav-label">Analytics</span></button>
+  <button class="bnav-btn" id="bnav-links" onclick="switchView('links')"><span class="bnav-icon">🔗</span><span class="bnav-label">Links</span></button>
+  <button class="bnav-btn" id="bnav-campaign" onclick="switchView('campaign')"><span class="bnav-icon">🎯</span><span class="bnav-label">Campaign</span></button>
+</div>
+
+<!-- ── HALEY BOTTOM NAV ── -->
+<div class="bottom-nav" id="haley-bottom-nav" style="display:none">
+  <button class="bnav-btn active" id="hbnav-cal" onclick="switchHaleyView('haley-cal')"><span class="bnav-icon">📅</span><span class="bnav-label">Calendar</span></button>
+  <button class="bnav-btn" id="hbnav-list" onclick="switchHaleyView('calendar')"><span class="bnav-icon">📋</span><span class="bnav-label">My Posts</span></button>
+</div>
+
+<!-- ── ADD POST MODAL ── -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <div class="modal-title">Add New Post</div>
+    <div class="modal-field"><div class="modal-label">Date</div><input type="date" class="modal-input" id="new-date"></div>
+    <div class="modal-field"><div class="modal-label">Title</div><input type="text" class="modal-input" id="new-title" placeholder="Post title"></div>
+    <div class="modal-field">
+      <div class="modal-label">Format</div>
+      <select class="modal-select" id="new-format">
+        <option>Photo Reel</option><option>Video Reel</option><option>Carousel</option><option>Talking Reel</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Owner</div>
+      <select class="modal-select" id="new-owner">
+        <option value="dana">Dana</option><option value="haley">Haley</option><option value="both">Both</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Pillar</div>
+      <select class="modal-select" id="new-pillar">
+        <option value="p1">Pillar 1 — SF Experience</option><option value="p2">Pillar 2 — Planning Authority</option>
+      </select>
+    </div>
+    <div class="modal-field"><div class="modal-label">Notes</div><textarea class="modal-textarea" id="new-notes" placeholder="Notes for this post…"></textarea></div>
+    <div class="modal-field"><div class="modal-label">Caption</div><textarea class="modal-textarea" id="new-caption" placeholder="Caption…" style="min-height:100px"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveNewPost()">Add Post</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD LINK MODAL ── -->
+<div class="modal-overlay" id="link-modal">
+  <div class="modal">
+    <div class="modal-title">Add Asset Link</div>
+    <div class="modal-field">
+      <div class="modal-label">Link Type</div>
+      <div class="link-type-grid">
+        <button class="link-type-btn selected" onclick="selectLinkType('drive',this)"><span class="link-type-icon">📁</span>Drive</button>
+        <button class="link-type-btn" onclick="selectLinkType('canva',this)"><span class="link-type-icon">🎨</span>Canva</button>
+        <button class="link-type-btn" onclick="selectLinkType('gallery',this)"><span class="link-type-icon">📸</span>Gallery</button>
+        <button class="link-type-btn" onclick="selectLinkType('dropbox',this)"><span class="link-type-icon">📦</span>Dropbox</button>
+        <button class="link-type-btn" onclick="selectLinkType('ig',this)"><span class="link-type-icon">📱</span>Instagram</button>
+        <button class="link-type-btn" onclick="selectLinkType('doc',this)"><span class="link-type-icon">📋</span>Other</button>
+      </div>
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Label</div>
+      <input type="text" class="modal-input" id="link-label" placeholder="e.g. March 9 Post Assets">
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">URL</div>
+      <input type="url" class="modal-input" id="link-url" placeholder="Paste link here…" inputmode="url">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeLinkModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveLink()">Add Link</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD LINK TO SECTION MODAL ── -->
+<div class="modal-overlay" id="al-modal">
+  <div class="modal">
+    <div class="modal-title">Add Link</div>
+    <div style="display:flex;gap:8px">
+      <div class="modal-field" style="width:56px;flex-shrink:0">
+        <div class="modal-label">Icon</div>
+        <input type="text" class="modal-input" id="al-icon" value="🔗" style="text-align:center;font-size:18px;padding:6px">
+      </div>
+      <div class="modal-field" style="flex:1">
+        <div class="modal-label">Name</div>
+        <input type="text" class="modal-input" id="al-name" placeholder="Link label">
+      </div>
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">URL</div>
+      <input type="url" class="modal-input" id="al-url" placeholder="https://…" inputmode="url">
+    </div>
+    <div class="modal-field">
+      <div class="modal-label">Description <span style="font-weight:400;opacity:0.7">(optional)</span></div>
+      <input type="text" class="modal-input" id="al-desc" placeholder="Short description">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeAddLinkModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveAddLink()">Add Link</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<button class="scroll-top" id="scrollTop" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+// ══════════════════════════════════════════════
+// DATA
+// ══════════════════════════════════════════════
+
+// ══════════════════════════════════════════════
+// LINKS PAGE DATA
+// ══════════════════════════════════════════════
+const DEFAULT_LINK_SECTIONS = [
+  { id:'ls1', title:'Content & Assets', style:'grid', links:[
+    { id:'ll1', icon:'📁', name:'March Folder', desc:'All March assets', url:'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a?usp=drive_link' },
+    { id:'ll2', icon:'📁', name:'April Folder', desc:'All April assets', url:'https://drive.google.com/drive/folders/1kpguU57kOd2BSy_tdg2rmAuuEldf3rjf?usp=drive_link' },
+    { id:'ll3', icon:'📁', name:'May Folder', desc:'All May assets', url:'https://drive.google.com/drive/folders/13yViqv_I9UPU2c7mq_iC_r8y4nNfnG4O?usp=drive_link' },
+    { id:'ll4', icon:'🎨', name:'Canva Templates', desc:'Brand templates', url:'https://www.canva.com/folder/FAFMGUVKgjU' },
+    { id:'ll5', icon:'✨', name:'Brand Assets', desc:'Logos, colors, fonts', url:'https://drive.google.com/drive/u/0/folders/1lq_BfBP6IcpLSD3e_YyOybbndtoZC-jc' },
+    { id:'ll6', icon:'📊', name:'Content Database', desc:'Full spreadsheet', url:'https://docs.google.com/spreadsheets/d/1WOg33oU0kvFkyHvSl17vaV97LMLBm7BU3XNA9hiecwY' },
+  ]},
+  { id:'ls2', title:'Publishing', style:'grid', links:[
+    { id:'ll7', icon:'📱', name:'Creator Studio', desc:'Schedule & publish', url:'https://business.facebook.com/creatorstudio/home' },
+    { id:'ll8', icon:'📸', name:'Instagram', desc:'Post directly', url:'https://www.instagram.com' },
+  ]},
+  { id:'ls3', title:'Strategy Docs', style:'list', links:[
+    { id:'ll9', icon:'📋', name:'Mar–May Campaign Strategy', url:'https://docs.google.com/document/d/1xO3ad5DzYjhjhVRIN0t_U9d-mBQ9nvux5j5i-VpizHg/edit' },
+    { id:'ll10', icon:'📅', name:'Full Content Calendar (Google Doc)', url:'https://docs.google.com/document/d/1WF_R_xfsrkJ80bMzgCRoPkrfKYAhXX44W9FlhXhV5pk/edit' },
+    { id:'ll11', icon:'🤝', name:'Social Media Meeting Agenda', url:'https://docs.google.com/document/d/14JC8Zsgm-ky_nb8Xb96P6GrzJ9D6V_AJqdIhhfoR7qs/edit' },
+    { id:'ll12', icon:'🎯', name:'Brand Review — Dana Shular', url:'https://docs.google.com/document/d/11qY84nsTiv3jhryaJvRoG8rdW_JHuC6wRNAxeXKVRsg/edit' },
+    { id:'ll13', icon:'🔗', name:'Content Links Doc', url:'https://docs.google.com/document/d/13B2yw78QnJEx6n46tACSfyhTnm2lIE49bjCYQ0xY5Bc/edit' },
+    { id:'ll14', icon:'🌐', name:'WordPress Admin', url:'https://ascendtogetherco.com/wp-admin' },
+    { id:'ll15', icon:'✉️', name:'ConvertKit', url:'https://app.convertkit.com/users/login' },
+  ]},
+  { id:'ls4', title:'Client Galleries', style:'list', links:[
+    { id:'ll16', icon:'📸', name:'All Galleries — Pic-Time', url:'https://danashularphotography.pic-time.com/professional#|client|clientgalleries' },
+    { id:'ll17', icon:'💍', name:'Amber & Mena Engagement', url:'https://danashularphotography.pic-time.com/-ambermenaengagement/gallery' },
+    { id:'ll18', icon:'💍', name:'Nicole & Matt', url:'https://danashularphotography.pic-time.com/-nicolematt/gallery' },
+    { id:'ll19', icon:'💍', name:'Chris & Maria Elopement', url:'https://danashularphotography.pic-time.com/-chrismariaelopement/gallery' },
+    { id:'ll20', icon:'💍', name:'Macy & Brandon Engagement', url:'https://danashularphotography.pic-time.com/-macybrandonengagements/gallery' },
+    { id:'ll21', icon:'💍', name:'Catie & James Engagement', url:'https://danashularphotography.pic-time.com/-catiejamesengagement/gallery' },
+  ]},
+  { id:'ls5', title:'Website', style:'list', links:[
+    { id:'ll22', icon:'🏠', name:'Home', url:'https://ascendtogetherco.com/' },
+    { id:'ll23', icon:'💒', name:'Elopements Page', url:'https://ascendtogetherco.com/elopements' },
+    { id:'ll24', icon:'🌸', name:'Weddings Page', url:'https://ascendtogetherco.com/weddings' },
+  ]},
+];
+
+let linkSections = [];
+function loadLinkSections() {
+  try { const s = localStorage.getItem('atc-links-v1'); if(s) { linkSections = JSON.parse(s); return; } } catch(e){}
+  linkSections = JSON.parse(JSON.stringify(DEFAULT_LINK_SECTIONS));
+}
+function saveLinkSections() { localStorage.setItem('atc-links-v1', JSON.stringify(linkSections)); }
+
+function renderLinksPage() {
+  const el = document.getElementById('links-page-content');
+  if(!el) return;
+  const isDana = currentRole === 'dana';
+  let html = '';
+  linkSections.forEach(sec => {
+    html += `<div class="sec-label">${isDana ? `<span contenteditable="true" class="sec-label-edit" 
+      onblur="renameLinkSection('${sec.id}',this.textContent.trim())">${sec.title}</span>` : sec.title}
+      ${isDana ? `<button onclick="deleteLinkSection('${sec.id}')" style="background:none;border:none;color:var(--stone);cursor:pointer;font-size:14px;margin-left:2px;line-height:1" title="Delete section">×</button>` : ''}
+    </div>`;
+    if(sec.style === 'grid') {
+      html += `<div class="ql-grid" id="sec-${sec.id}">`;
+      sec.links.forEach(l => {
+        html += `<div style="position:relative">
+          <a href="${l.url}" target="_blank" class="ql-card">
+            <span class="ql-icon">${l.icon}</span>
+            <div class="ql-name">${l.name}</div>
+            ${l.desc ? `<div class="ql-desc">${l.desc}</div>` : ''}
+          </a>
+          ${isDana ? `<button onclick="deleteLinkItem('${sec.id}','${l.id}')" style="position:absolute;top:6px;right:6px;background:var(--sand);border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;color:var(--espresso);line-height:1;display:flex;align-items:center;justify-content:center;z-index:2">×</button>` : ''}
+        </div>`;
+      });
+      html += `</div>`;
+    } else {
+      html += `<div class="link-list" id="sec-${sec.id}">`;
+      sec.links.forEach(l => {
+        html += `<div style="position:relative;display:flex;align-items:center">
+          <a href="${l.url}" target="_blank" class="link-item" style="flex:1">
+            <div class="link-icon li-doc">${l.icon}</div>${l.name}
+          </a>
+          ${isDana ? `<button onclick="deleteLinkItem('${sec.id}','${l.id}')" style="background:none;border:none;color:var(--stone);cursor:pointer;font-size:18px;padding:0 4px;flex-shrink:0;line-height:1">×</button>` : ''}
+        </div>`;
+      });
+      html += `</div>`;
+    }
+    if(isDana) {
+      html += `<button onclick="openAddLinkToSection('${sec.id}')" style="background:var(--cream);border:1px dashed var(--sand);border-radius:10px;color:var(--stone);font-size:12px;padding:6px 12px;cursor:pointer;width:100%;margin-bottom:6px;font-family:'DM Sans',sans-serif">＋ Add link to ${sec.title}</button>`;
+    }
+  });
+  if(isDana) {
+    html += `<button onclick="openAddLinkSection()" style="background:var(--gold);color:var(--cream);border:none;border-radius:12px;padding:12px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;width:100%;margin-top:8px">＋ Add New Section</button>`;
+  }
+  el.innerHTML = html;
+}
+
+function renameLinkSection(secId, newTitle) {
+  const sec = linkSections.find(s => s.id === secId);
+  if(sec && newTitle) { sec.title = newTitle; saveLinkSections(); }
+}
+function deleteLinkSection(secId) {
+  if(!confirm('Delete this entire section?')) return;
+  linkSections = linkSections.filter(s => s.id !== secId);
+  saveLinkSections(); renderLinksPage();
+}
+function deleteLinkItem(secId, linkId) {
+  const sec = linkSections.find(s => s.id === secId);
+  if(!sec) return;
+  const link = sec.links.find(l => l.id === linkId);
+  const name = link ? link.name || link.label || 'this link' : 'this link';
+  showConfirmDelete('Remove "' + name + '"?', () => {
+    sec.links = sec.links.filter(l => l.id !== linkId);
+    saveLinkSections(); renderLinksPage();
+  });
+}
+
+// Add link to section modal
+let addLinkTargetSec = null;
+function openAddLinkToSection(secId) {
+  addLinkTargetSec = secId;
+  document.getElementById('al-icon').value = '🔗';
+  document.getElementById('al-name').value = '';
+  document.getElementById('al-desc').value = '';
+  document.getElementById('al-url').value = '';
+  document.getElementById('al-modal').classList.add('open');
+}
+function closeAddLinkModal() {
+  document.getElementById('al-modal').classList.remove('open');
+}
+function saveAddLink() {
+  const icon = document.getElementById('al-icon').value.trim() || '🔗';
+  const name = document.getElementById('al-name').value.trim();
+  const url = document.getElementById('al-url').value.trim();
+  const desc = document.getElementById('al-desc').value.trim();
+  if(!name || !url) { toast('Name and URL required'); return; }
+  const sec = linkSections.find(s => s.id === addLinkTargetSec);
+  if(!sec) return;
+  sec.links.push({ id:'ll'+Date.now(), icon, name, desc, url });
+  saveLinkSections(); renderLinksPage(); closeAddLinkModal();
+  toast('Link added!');
+}
+
+// Add new section
+function openAddLinkSection() {
+  const title = prompt('Section name:');
+  if(!title) return;
+  const style = confirm('Use grid layout? (OK = grid, Cancel = list)') ? 'grid' : 'list';
+  linkSections.push({ id:'ls'+Date.now(), title, style, links:[] });
+  saveLinkSections(); renderLinksPage();
+}
+
+const DEFAULT_POSTS = {
+  mar: [
+    { id:'m1', date:'2026-03-01', title:'Misconception: Hike 6 Miles', format:'Photo Reel', owner:'haley', pillar:'p1', status:'published',
+      notes:'Reel template: instagram.com/reel/DRSqTDvEl9- — Text 1: "Elopement Misconception: You have to hike miles to find a breathtaking location." Text 2: "Not in San Francisco." BTS video of couple walking → faster photo clips.',
+      caption:`Not every couple wants to hike six miles on their wedding day. Some of you want the cliffs. The ocean. The kind of backdrop that feels cinematic. You just do not want the logistics to take over the day.
+
+That is why San Francisco is one of the best places in California to elope if you are looking for accessible epic. And here is the biggest misconception about San Francisco: People assume it is too crowded. Too public. Too complicated to feel intimate.
+
+That is only true if you do not know how to design it well. There are coastal bluff locations here that feel expansive and private. Iconic views that are minutes from where you park. Timelines that avoid peak traffic and heavy foot traffic entirely.
+
+San Francisco is not chaotic. It is strategic. And when it is planned intentionally, it gives you impact without friction.
+
+That is exactly why we specialize here. If you are still deciding where to elope and want something that feels dramatic but doable — San Francisco is one of the strongest options in California.
+
+— San Francisco elopement, SF elopement photographer, Marin Headlands elopement, coastal wedding San Francisco, accessible epic elopement, Bay Area elopement planning`,
+      links:[{label:'3/1 Post Assets',url:'https://drive.google.com/drive/folders/1fV411yp1NeLnUEtD7SQ6MvFZzRvPedSS',type:'drive'},{label:'Completed Reel (Final)',url:'https://drive.google.com/file/d/12UurCbafVx3j1tdsh66XqnDJWJ3rTu4l/view',type:'drive'}], files:[] },
+
+    { id:'m2', date:'2026-03-04', title:'Where to Elope? Thought', format:'Carousel', owner:'haley', pillar:'p1', status:'published',
+      notes:'Megan & Hassan gallery. Blog for Stories: ascendtogetherco.com/san-francisco-elopement-megan-and-hassan/',
+      caption:`When couples start looking at California elopement locations, it usually goes like this: Beach? Mountains? Somewhere dramatic?
+
+San Francisco is not always the first idea. And honestly, that surprises me. Because if what you want is something that feels iconic without turning into a full production, this city makes a lot of sense.
+
+You get architecture that feels timeless. Views that actually look like California. And locations that are close enough together that the day does not feel like a travel schedule.
+
+You are not hiking for miles. You are not coordinating remote vendors. You are not trying to figure out how to make a cliff work. You are moving through a city that already knows how to hold a story.
+
+That is why we specialize in San Francisco elopements. We fully plan and photograph SF elopements in 30 days. Helping you choose the right spots, build a timeline that flows, and design a day that feels intentional instead of overwhelming.
+
+If you are in the "where in California should we elope?" phase and want something beautiful but realistic, do not skip San Francisco. Inquire through the link in our bio and we will map it out with you!`,
+      links:[{label:'Megan & Hassan Gallery',url:'https://drive.google.com/drive/folders/1d7S5LPWfVCc0aVTdp82ASDJ93CemEisS',type:'drive'},{label:'megan & hassan.png',url:'https://drive.google.com/file/d/1ZexI4P2_8RUIpWmWllgb59a9uR0vgD6s/view',type:'drive'}], files:[] },
+
+    { id:'m3', date:'2026-03-06', title:'3 Ways to Plan', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana films talking-to-camera. Script to be developed. Due: Feb 27, 2026.', caption:'Caption TBD',
+      links:[{label:'March 26 Content Folder',url:'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a',type:'drive'}], files:[] },
+
+    { id:'m4', date:'2026-03-09', title:'Eloped in SF?', format:'Photo Reel', owner:'haley', pillar:'p1', status:'review',
+      notes:'Reel template: instagram.com/reel/DQFY8heEn2r/ — Text 1: "You eloped in San Francisco?" Text 2: "YES" → Epic SF spot pictures.',
+      caption:`Who would have thought San Francisco to elope? It usually is not the first place couples consider. It feels like a city you visit, not somewhere you build something this personal. But when you see it done well, you realize how much it actually gives you without making the day complicated.
+
+And once you book, everything becomes concrete. Within days, you receive a fully customized San Francisco elopement proposal built around you. Not a template.
+
+Your ceremony location selected. Your portrait spots mapped intentionally. A realistic budget based on what you actually want. Vendors already vetted and chosen to fit your style. A timeline built around how the city actually moves.
+
+You are not wondering what things cost. You are not researching florists at midnight. You are not trying to compare ten different locations on Google Maps. You see the full plan laid out in front of you. It feels handled. And within 30 days, it is secured and finalized.
+
+That is what our all-inclusive San Francisco elopements are designed to do. You are not experimenting with a city you barely know. You are guided through it by people who do.
+
+If San Francisco has not been on your list yet, it might be worth looking at it differently. Inquire through the link in our bio to begin your 30-day San Francisco plan.
+
+San Francisco elopement, elope in San Francisco, SF elopement photographer, San Francisco City Hall elopement, Marin Headlands elopement`,
+      links:[{label:'3/9 Post Assets',url:'https://drive.google.com/drive/folders/1pp43tQL_L3qN19tZQipP0k9RSrxAOoBq',type:'drive'},{label:'Completed Reel',url:'https://drive.google.com/file/d/1CUwo7i5L-aBpZDF87KMVUKRtrU7KNoXx/view',type:'drive'}], files:[] },
+
+    { id:'m5', date:'2026-03-11', title:'Palace of Fine Arts / Baker Beach', format:'Carousel', owner:'haley', pillar:'p1', status:'review',
+      notes:'Showcasing locations: Palace of Fine Arts & Baker Beach. Amber & Mena engagement gallery.',
+      caption:`You do not have to choose between architecture and coastline in San Francisco. The Palace of Fine Arts is one of the strongest examples of that. It already feels elegant. Established. Thoughtful. You do not have to manufacture the backdrop.
+
+And because Baker Beach is minutes away, you can pair timeless architecture with full Golden Gate coastline without stretching your day thin.
+
+Now here's how it actually works. If this is your engagement session, Palace and Baker become a curated pairing from our San Francisco location guide. We help you choose which one fits your style best, how to layer them together, and how to build contrast into the session so it feels cohesive instead of random. You are not just picking two pretty spots. You are designing an experience.
+
+If this is your elopement, City Hall is often the ceremony. Palace and Baker support the rest of your 6-hour San Francisco experience. In your customized proposal, you see exactly how those locations fit together — the pacing, the transitions, the real budget, the vendors who make sense for the plan. Nothing is left to chance.
+
+That is when it stops feeling like a big city decision and starts feeling clear. Within days of booking, you have the plan. Within 30 days, it is secured.
+
+Apply through the link in our bio to begin your 30-day San Francisco plan.
+
+Palace of Fine Arts elopement, Baker Beach elopement, Golden Gate Bridge wedding photos, San Francisco City Hall elopement`,
+      links:[{label:'Canva Template',url:'https://www.canva.com/design/DAGYqHXcplU/view',type:'canva'},{label:'Completed Carousel',url:'https://drive.google.com/file/d/15aYcmhBq6R-fqsy4YkuOElDVsedePkuj/view',type:'drive'},{label:'Amber & Mena Gallery',url:'https://danashularphotography.pic-time.com/-ambermenaengagement/gallery',type:'gallery'}], files:[] },
+
+    { id:'m6', date:'2026-03-13', title:'Dana Talking Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana films talking-to-camera authority piece. Script TBD. Due: Mar 6, 2026.', caption:'Caption TBD',
+      links:[{label:'March 26 Content Folder',url:'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a',type:'drive'}], files:[] },
+
+    { id:'m7', date:'2026-03-16', title:'Amber & Mena', format:'Video Reel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Love story/engagement/excitement reel. 30sec–1min. Grab voiceover clip of them OR trending music with best shots. Due: Mar 9, 2026.', caption:'Caption TBD',
+      links:[{label:'Amber & Mena Gallery',url:'https://danashularphotography.pic-time.com/-ambermenaengagement/gallery',type:'gallery'},{label:'March 26 Content Folder',url:'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a',type:'drive'}], files:[] },
+
+    { id:'m8', date:'2026-03-18', title:'Nicole & Matt', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Blog for stories: ascendtogetherco.com/intimate-elopement/ — Due: Mar 11, 2026.',
+      caption:`Eloping with family in San Francisco sounds simple… until you actually try to plan it.
+
+How many people is still intimate? Where do you gather without it feeling like a public performance? What venues actually allow small ceremonies? Is City Hall the right move — or is there a more private option? How do you keep it meaningful without it turning into a full wedding?
+
+This is where most couples get overwhelmed. You want your people there. You just do not want to lose the simplicity that made you choose an elopement in the first place.
+
+That is where we step in. When you book with us, you are not left scrolling Google for answers. You receive a customized proposal that includes San Francisco gems that actually accommodate elopements — private venues, coastal overlooks, architectural spaces, intimate dinner locations — all vetted for guest count, accessibility, and flow.
+
+Within days of booking, you see the full plan — locations, guest strategy, real budget, vetted vendors, and how everything unfolds. Within 30 days, it is secured.
+
+San Francisco gives you options. We make them make sense. Apply through the link in our bio to begin your 30-day San Francisco elopement plan.`,
+      links:[{label:'Canva Template',url:'https://www.canva.com/design/DAGYqHXcplU/view',type:'canva'},{label:'Nicole & Matt Gallery',url:'https://danashularphotography.pic-time.com/-nicolematt/gallery',type:'gallery'}], files:[] },
+
+    { id:'m9', date:'2026-03-20', title:'Client Showcase Carousel', format:'Carousel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Client showcase. Caption TBD. Due: Mar 13, 2026.', caption:'Caption TBD',
+      links:[{label:'Canva Template',url:'https://www.canva.com/design/DAGYqHXcplU/view',type:'canva'},{label:'March 26 Content Folder',url:'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a',type:'drive'}], files:[] },
+
+    { id:'m10', date:'2026-03-23', title:'Addicted to Elopements', format:'Photo Reel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Reel template: instagram.com/reel/DQXZVD2gekb/ — Text 1: "You know what I\'m addicted to?" Text 2: "Elopements in San Francisco." Use Nicole & Matt gallery. Due: Mar 16, 2026.', caption:'Caption TBD',
+      links:[{label:'Nicole & Matt Gallery',url:'https://danashularphotography.pic-time.com/-nicolematt/gallery',type:'gallery'},{label:'March 26 Content Folder',url:'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a',type:'drive'}], files:[] },
+
+    { id:'m11', date:'2026-03-25', title:'Chris & Maria', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Blog: ascendtogetherco.com/san-francisco-city-hall-elopement-maria-chris/ — Due: Mar 18, 2026.',
+      caption:`San Francisco City Hall is the most iconic City Hall in the country. And it is one of the strongest ceremony decisions you can make.
+
+You walk in and it already feels like a wedding. The marble, the height of the dome, the symmetry — it carries weight without you needing to add anything. No decor. No production. No overbuilding it.
+
+For Maria and Chris, that meant their families stood close around them, fully present. No coordinating. No managing. No distractions. Just the two of them saying their vows in a space filled with beauty and the people who matter most.
+
+That is what City Hall does well. It makes the ceremony simple without making it feel small. And because you are in San Francisco, the day does not stop there. Within the same afternoon, you can step into dramatic coastline, tree-lined paths, and historic architecture.
+
+City Hall gives you the ceremony. San Francisco gives you everything around it. Inquire through the link in our bio to begin your 30-day San Francisco plan.`,
+      links:[{label:'maria & chris.png',url:'https://drive.google.com/file/d/1Br-rKxiMMYNu4VGdwyeQlVwCbF2SuOSv/view',type:'drive'},{label:'Chris & Maria Gallery',url:'https://danashularphotography.pic-time.com/-chrismariaelopement/gallery',type:'gallery'}], files:[] },
+
+    { id:'m12', date:'2026-03-27', title:'Dana Talking Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana films talking-to-camera authority piece. Script TBD. Due: Mar 20, 2026.', caption:'Caption TBD',
+      links:[{label:'March 26 Content Folder',url:'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a',type:'drive'}], files:[] },
+
+    { id:'m13', date:'2026-03-30', title:'Macy & Brandon', format:'Video Reel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Stories showcase (Dana). Video/photo combo or 15–30 second video. Due: Mar 23, 2026.', caption:'Caption TBD',
+      links:[{label:'3/30 Post Assets',url:'https://drive.google.com/drive/folders/1pWSW5LASVxCfGuTJyZqtmC_0Xpo9rNla',type:'drive'},{label:'Macy & Brandon Videos',url:'https://drive.google.com/drive/folders/1s27AT1W_2JGB-fzEiQ-uF_hd-DnPbCIY',type:'drive'},{label:'Macy & Brandon Gallery',url:'https://danashularphotography.pic-time.com/-macybrandonengagements/gallery',type:'gallery'}], files:[] },
+  ],
+
+  apr: [
+    { id:'a1', date:'2026-04-01', title:'Catie & James Engagement', format:'Photo Reel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Reel template: instagram.com/reel/DTyPKd5kp61/ — Use Catie & James engagement gallery.', caption:'Caption TBD',
+      links:[{label:'Catie & James Gallery',url:'https://danashularphotography.pic-time.com/-catiejamesengagement/gallery',type:'gallery'}], files:[] },
+    { id:'a2', date:'2026-04-03', title:'Victoria & Cody Engagement', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Victoria & Cody Engagement showcase.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a3', date:'2026-04-06', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a4', date:'2026-04-08', title:'Client Showcase Week 2', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a5', date:'2026-04-10', title:'Client Showcase', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a6', date:'2026-04-13', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a7', date:'2026-04-15', title:'Client Showcase Week 3', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a8', date:'2026-04-17', title:'Client Showcase', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a9', date:'2026-04-20', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a10', date:'2026-04-22', title:'Client Showcase Week 4', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a11', date:'2026-04-24', title:'Client Showcase', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'a12', date:'2026-04-27', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+  ],
+
+  may: [
+    { id:'my1', date:'2026-05-01', title:'Client Showcase Week 1', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my2', date:'2026-05-04', title:'Client Showcase', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my3', date:'2026-05-06', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my4', date:'2026-05-08', title:'Client Showcase Week 2', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my5', date:'2026-05-11', title:'Client Showcase', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my6', date:'2026-05-13', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my7', date:'2026-05-15', title:'Client Showcase Week 3', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my8', date:'2026-05-18', title:'Client Showcase', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my9', date:'2026-05-20', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my10', date:'2026-05-22', title:'Client Showcase Week 4', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my11', date:'2026-05-27', title:'Client Showcase', format:'Carousel', owner:'haley', pillar:'p1', status:'draft',
+      notes:'Client showcase TBD.', caption:'Caption TBD', links:[], files:[] },
+    { id:'my12', date:'2026-05-29', title:'Dana Authority Reel', format:'Talking Reel', owner:'dana', pillar:'p2', status:'draft',
+      notes:'Dana authority/educational reel. Script TBD.', caption:'Caption TBD', links:[], files:[] },
+  ]
+};
+
+// ══════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════
+let currentRole = null;
+let currentView = 'calendar';
+let currentMonth = 'mar';
+let posts = {};
+let analytics = {};
+
+const SYNC_URL = 'https://atc-hub-sync.vercel.app/api/sync';
+
+function saveData() {
+  localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
+  fetch(SYNC_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ posts: posts })
+  })
+  .then(r => r.json())
+  .then(data => {
+    if(data.ok) {
+      showToast('✅ Synced!');
+    } else {
+      showToast('⚠️ Sync issue: ' + JSON.stringify(data));
+    }
+  })
+  .catch(err => {
+    showToast('❌ Sync failed: ' + err.message);
+  });
+}
+function saveAnalytics() {
+  localStorage.setItem('atc-analytics-v2', JSON.stringify(analytics));
+}
+
+function loadData(callback) {
+  // Step 1: Always load local/default data instantly so UI never shows blank
+  const localSaved = localStorage.getItem('atc-posts-v2');
+  if (localSaved) {
+    try { posts = JSON.parse(localSaved); } catch(e) { posts = JSON.parse(JSON.stringify(DEFAULT_POSTS)); }
+  } else {
+    posts = JSON.parse(JSON.stringify(DEFAULT_POSTS));
+  }
+  analytics = JSON.parse(localStorage.getItem('atc-analytics-v2') || '{}');
+  loadLinkSections();
+  if(callback) callback(); // render immediately with local data
+
+  // Step 2: Fetch from Vercel proxy in background for cross-device sync
+  fetch(SYNC_URL)
+    .then(r => r.json())
+    .then(data => {
+      const remotePosts = data.posts;
+      if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
+        // Remote has real data — use it and update local cache
+        posts = remotePosts;
+        localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
+        if(callback) callback();
+        else renderCalendar();
+      } else {
+        // Remote is empty — seed it with our current posts
+        saveData();
+      }
+    })
+    .catch(() => {
+      // Network error — local data already loaded, carry on
+    });
+}
+
+// ══════════════════════════════════════════════
+// ROLE
+// ══════════════════════════════════════════════
+function refreshData() {
+  const btn = document.getElementById('refresh-btn');
+  if(btn) btn.textContent = '...';
+  loadData(() => {
+    renderCalendar();
+    buildAnalytics();
+    if(btn) btn.textContent = 'Refreshed!';
+    setTimeout(() => { if(btn) btn.textContent = 'Refresh'; }, 1500);
+  });
+}
+
+function showPinPrompt() {
+  const overlay = document.getElementById('pin-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').textContent = '';
+  setTimeout(() => document.getElementById('pin-input').focus(), 100);
+}
+
+function closePinPrompt() {
+  document.getElementById('pin-overlay').style.display = 'none';
+}
+
+function clearPinError() {
+  document.getElementById('pin-error').textContent = '';
+}
+
+function checkPin() {
+  const entered = document.getElementById('pin-input').value.trim();
+  if (entered === '1007') {
+    closePinPrompt();
+    setRole('dana');
+  } else {
+    const input = document.getElementById('pin-input');
+    document.getElementById('pin-error').textContent = 'Incorrect PIN. Try again.';
+    input.value = '';
+    input.focus();
+    input.style.borderColor = '#B84040';
+    setTimeout(() => { input.style.borderColor = '#D1B5AB'; }, 1000);
+  }
+}
+
+function setRole(role) {
+  loadData(() => { renderCalendar(); buildAnalytics(); });
+  currentRole = role;
+  document.getElementById('role-gate').style.display = 'none';
+  document.getElementById('main-header').style.display = 'block';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('bottom-nav').style.display = role === 'dana' ? 'flex' : 'none';
+  document.getElementById('haley-bottom-nav').style.display = role === 'haley' ? 'flex' : 'none';
+  // Remove bottom padding for Haley since she has no nav bar
+  document.querySelectorAll('.view').forEach(v => v.style.paddingBottom = role === 'dana' ? '' : '24px');
+  const pill = document.getElementById('role-pill');
+  pill.textContent = role === 'dana' ? 'Dana' : 'Haley';
+  pill.className = 'role-pill ' + (role === 'dana' ? 'role-pill-dana' : 'role-pill-haley');
+  // Show analytics, campaign, links, refresh only for dana
+  document.getElementById('refresh-btn').style.display = role === 'dana' ? 'block' : 'none';
+  document.getElementById('bnav-analytics').style.display = role === 'dana' ? 'flex' : 'none';
+  document.getElementById('bnav-campaign').style.display = role === 'dana' ? 'flex' : 'none';
+  document.getElementById('bnav-links').style.display = role === 'dana' ? 'flex' : 'none';
+  // Show calendar view properly (fixes blank on load)
+  switchView('calendar');
+  buildAnalytics();
+  renderLinksPage();
+  // Check for pending notifications (Haley marked something uploaded while Dana was away)
+  if(role === 'dana') {
+    setTimeout(checkPendingNotifications, 600);
+  }
+}
+function checkPendingNotifications() {
+  const pending = JSON.parse(localStorage.getItem('atc-pending-notify') || '[]');
+  if(pending.length === 0) return;
+  const count = pending.length;
+  const last = pending[pending.length - 1];
+  toast(count === 1 ? 'Haley uploaded content! ' + last.msg.replace('Hi Dana! Haley just uploaded content for ','').replace(' and it is ready for your review!','') : count + ' posts marked Content Uploaded by Haley!');
+  localStorage.removeItem('atc-pending-notify');
+}
+function switchHaleyView(name) {
+  // Switch between haley-cal (grid) and calendar (card list)
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  document.getElementById('view-' + name).style.display = 'block';
+  // Update Haley tab active state
+  document.getElementById('hbnav-cal').classList.toggle('active', name === 'haley-cal');
+  document.getElementById('hbnav-list').classList.toggle('active', name === 'calendar');
+  if(name === 'haley-cal') renderHaleyCalendar();
+  if(name === 'calendar') renderCalendar();
+}
+
+function switchRole() {
+  currentRole = null;
+  document.getElementById('role-gate').style.display = 'flex';
+  document.getElementById('main-header').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('bottom-nav').style.display = 'none';
+  document.getElementById('haley-bottom-nav').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════
+function switchView(name) {
+  document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+  document.getElementById('view-' + name).style.display = 'block';
+  document.querySelectorAll('.bnav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('bnav-' + name).classList.add('active');
+  currentView = name;
+  window.scrollTo(0, 0);
+  if(name === 'calendar') renderCalendar();
+  if(name === 'analytics') buildAnalytics();
+  if(name === 'links') renderLinksPage();
+}
+
+function switchMonth(m, btn) {
+  document.querySelectorAll('.month-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  currentMonth = m;
+  renderCalendar();
+  renderHaleyCalendar();
+  buildAnalytics();
+}
+
+// ══════════════════════════════════════════════
+// RENDER CALENDAR
+// ══════════════════════════════════════════════
+const MONTH_LABELS = { mar: 'March 2026', apr: 'April 2026', may: 'May 2026' };
+const WEEK_LABELS = { mar:['Week 1','Week 2','Week 3','Week 4'], apr:['Week 1','Week 2','Week 3','Week 4'], may:['Week 1','Week 2','Week 3','Week 4'] };
+
+function getWeekGroup(date, month) {
+  // Parse date parts directly to avoid UTC timezone shift
+  const [y, m, day] = date.split('-').map(Number);
+  if(day <= 7) return 0;
+  if(day <= 14) return 1;
+  if(day <= 21) return 2;
+  return 3;
+}
+
+const DRIVE_FOLDERS = {
+  mar: { url: 'https://drive.google.com/drive/folders/1ov1tMX01RqOijeDXcywE-j07oAKoLC1a?usp=drive_link', label: 'March Content Folder' },
+  apr: { url: 'https://drive.google.com/drive/folders/1kpguU57kOd2BSy_tdg2rmAuuEldf3rjf?usp=drive_link', label: 'April Content Folder' },
+  may: { url: 'https://drive.google.com/drive/folders/13yViqv_I9UPU2c7mq_iC_r8y4nNfnG4O?usp=drive_link', label: 'May Content Folder' },
+};
+
+
+// ══════════════════════════════════════════════
+// HALEY CALENDAR VIEW
+// ══════════════════════════════════════════════
+function renderHaleyCalendar() {
+  const container = document.getElementById('view-haley-cal');
+  if(!container) return;
+
+  const monthPosts = (posts[currentMonth] || []).filter(p => p.owner === 'haley' || p.owner === 'both');
+  const postsByDate = {};
+  monthPosts.forEach(p => {
+    if(!postsByDate[p.date]) postsByDate[p.date] = [];
+    postsByDate[p.date].push(p);
+  });
+
+  // Figure out first day and days in month
+  const [yr, mo] = currentMonth === 'mar' ? [2026,3] : currentMonth === 'apr' ? [2026,4] : [2026,5];
+  const daysInMonth = new Date(yr, mo, 0).getDate();
+  const firstDow = new Date(yr, mo-1, 1).getDay(); // 0=Sun
+
+  const statusColors = {
+    'draft':       '#B5A187',
+    'in-progress': '#A1786B',
+    'uploaded':    '#5A8F6A',
+    'review':      '#7A9BBF',
+    'scheduled':   '#B88AC0',
+    'published':   '#4A7A5A'
+  };
+  const statusLabels = {
+    'draft':'Draft','in-progress':'In Progress','uploaded':'Uploaded ✓',
+    'review':'Review','scheduled':'Scheduled','published':'Published'
+  };
+
+  // Build legend
+  const usedStatuses = [...new Set(monthPosts.map(p => p.haleyStatus || p.status || 'draft'))];
+  let legendHtml = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px">';
+  usedStatuses.forEach(s => {
+    legendHtml += `<div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#594E42">
+      <div style="width:10px;height:10px;border-radius:50%;background:${statusColors[s]||'#B5A187'}"></div>
+      ${statusLabels[s]||s}
+    </div>`;
+  });
+  legendHtml += '</div>';
+
+  // Build month grid
+  const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  let gridHtml = '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:20px">';
+  dayNames.forEach(d => {
+    gridHtml += `<div style="text-align:center;font-size:10px;font-weight:600;letter-spacing:0.08em;color:#B5A187;padding:4px 0;text-transform:uppercase">${d}</div>`;
+  });
+
+  // Empty cells before month starts
+  for(let i = 0; i < firstDow; i++) {
+    gridHtml += '<div></div>';
+  }
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0,10);
+
+  for(let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${yr}-${String(mo).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const dayPosts = postsByDate[dateStr] || [];
+    const isToday = dateStr === todayStr;
+    const isPast = dateStr < todayStr;
+
+    let dotsHtml = '';
+    dayPosts.forEach(p => {
+      const s = p.haleyStatus || p.status || 'draft';
+      dotsHtml += `<div style="width:7px;height:7px;border-radius:50%;background:${statusColors[s]||'#B5A187'};flex-shrink:0" title="${p.title}"></div>`;
+    });
+
+    const hasPost = dayPosts.length > 0;
+    const bgColor = isToday ? '#A1786B' : hasPost ? '#FDF8F2' : 'transparent';
+    const textColor = isToday ? '#FCFAF5' : isPast && !hasPost ? '#C8BDB8' : '#2B2E2E';
+    const border = hasPost && !isToday ? '1px solid #D1B5AB' : isToday ? 'none' : '1px solid transparent';
+    const cursor = hasPost ? 'pointer' : 'default';
+
+    gridHtml += `<div onclick="${hasPost ? `toggleHaleyDayDetail('${dateStr}')` : ''}" 
+      style="border-radius:10px;padding:6px 4px 5px;background:${bgColor};border:${border};cursor:${cursor};min-height:52px;display:flex;flex-direction:column;align-items:center;gap:3px;transition:background 0.15s">
+      <div style="font-size:13px;font-weight:${isToday||hasPost?'700':'400'};color:${textColor};line-height:1">${day}</div>
+      ${hasPost ? `<div style="display:flex;flex-wrap:wrap;gap:2px;justify-content:center">${dotsHtml}</div>` : ''}
+    </div>`;
+  }
+  gridHtml += '</div>';
+
+  // Upcoming posts list — next 5 undone
+  const upcoming = monthPosts
+    .filter(p => (p.haleyStatus || p.status || 'draft') !== 'uploaded' && p.date >= todayStr)
+    .sort((a,b) => a.date.localeCompare(b.date))
+    .slice(0, 5);
+
+  let upcomingHtml = '';
+  if(upcoming.length > 0) {
+    upcomingHtml = `<div style="font-family:'Cormorant Garamond',serif;font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#A1786B;margin:4px 0 10px;display:flex;align-items:center;gap:8px">Up Next</div>`;
+    upcoming.forEach(p => {
+      const [_y,_m,_d] = p.date.split('-').map(Number);
+      const dateLabel = new Date(_y,_m-1,_d).toLocaleDateString('en',{month:'short',day:'numeric'});
+      const s = p.haleyStatus || p.status || 'draft';
+      upcomingHtml += `<div style="display:flex;align-items:center;gap:12px;background:#FDF8F2;border:1px solid #D1B5AB;border-radius:12px;padding:12px 14px;margin-bottom:8px">
+        <div style="width:38px;height:38px;border-radius:10px;background:#FCFAF5;border:1px solid #D1B5AB;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0">
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.08em;color:#B5A187;text-transform:uppercase">${new Date(_y,_m-1,_d).toLocaleDateString('en',{month:'short'})}</div>
+          <div style="font-size:17px;font-weight:700;color:#2B2E2E;line-height:1">${_d}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:#2B2E2E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.title}</div>
+          <div style="font-size:11px;color:#B5A187;margin-top:2px">${p.format}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;padding:4px 9px;border-radius:8px;background:${statusColors[s]}22;color:${statusColors[s]}">
+          <div style="width:6px;height:6px;border-radius:50%;background:${statusColors[s]}"></div>
+          ${statusLabels[s]||s}
+        </div>
+      </div>`;
+    });
+  }
+
+  // Drive folder banner
+  const folder = DRIVE_FOLDERS[currentMonth];
+  const driveBanner = `<div style="background:#F5F2EC;border:1px solid #D1B5AB;border-radius:14px;padding:14px;margin-bottom:16px">
+    <div style="font-size:10px;font-weight:600;letter-spacing:0.13em;text-transform:uppercase;color:#B5A187;margin-bottom:8px">📁 ${MONTH_LABELS[currentMonth]} Assets</div>
+    <a href="${folder.url}" target="_blank" style="display:flex;align-items:center;gap:8px;background:#FCFAF5;border:1px solid #D1B5AB;border-radius:10px;padding:9px 12px;text-decoration:none;color:#594E42;font-size:12px;font-weight:500">
+      <span>📁</span> Open ${folder.label} in Drive
+    </a>
+  </div>`;
+
+  // Progress bar
+  const CONTRACT_GOAL = 8;
+  const uploaded = monthPosts.filter(p => (p.haleyStatus || p.status || 'draft') === 'uploaded').length;
+  const pct = Math.min(100, Math.round((uploaded / CONTRACT_GOAL) * 100));
+  const hitGoal = uploaded >= CONTRACT_GOAL;
+  const progressBar = `
+    <div style="background:#FDF8F2;border:1.5px solid ${hitGoal ? '#5A8F6A' : '#D1B5AB'};border-radius:16px;padding:16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:#2B2E2E">${MONTH_LABELS[currentMonth]} Progress</div>
+        <div style="font-size:13px;font-weight:700;color:${hitGoal ? '#5A8F6A' : '#A1786B'}">${uploaded} / ${CONTRACT_GOAL} uploaded</div>
+      </div>
+      <div style="background:#E8DDD4;border-radius:99px;height:10px;overflow:hidden;margin-bottom:10px">
+        <div style="background:${hitGoal ? '#5A8F6A' : '#A1786B'};height:100%;width:${pct}%;border-radius:99px;transition:width 0.4s ease"></div>
+      </div>
+      ${hitGoal ? `
+        <div style="display:flex;align-items:center;gap:8px;background:#5A8F6A18;border:1px solid #5A8F6A44;border-radius:12px;padding:12px 14px">
+          <div style="font-size:18px">🎉</div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#3A6B4A">You hit your ${CONTRACT_GOAL}-post goal!</div>
+            <div style="font-size:11px;color:#5A8F6A;margin-top:2px">Time to send your invoice to Dana 📧</div>
+          </div>
+        </div>` : `
+        <div style="font-size:11px;color:#B5A187">${CONTRACT_GOAL - uploaded} more post${CONTRACT_GOAL - uploaded === 1 ? '' : 's'} to reach your ${CONTRACT_GOAL}-post contract goal</div>
+      `}
+    </div>`;
+
+  container.innerHTML = `
+    <div id="haley-detail-panel"></div>
+    ${progressBar}
+    ${driveBanner}
+    ${legendHtml}
+    ${gridHtml}
+    ${upcomingHtml}
+  `;
+}
+
+function toggleHaleyDayDetail(dateStr) {
+  const panel = document.getElementById('haley-detail-panel');
+  if(!panel) return;
+  // If already showing this date, close it
+  if(panel.dataset.date === dateStr && panel.innerHTML !== '') {
+    panel.innerHTML = '';
+    panel.dataset.date = '';
+    return;
+  }
+  panel.dataset.date = dateStr;
+  const monthPosts = (posts[currentMonth] || []).filter(p => (p.owner === 'haley' || p.owner === 'both') && p.date === dateStr);
+  if(!monthPosts.length) { panel.innerHTML = ''; return; }
+
+  const statusColors = {'draft':'#B5A187','in-progress':'#A1786B','uploaded':'#5A8F6A','review':'#7A9BBF','scheduled':'#B88AC0','published':'#4A7A5A'};
+  const statusLabels = {'draft':'Draft','in-progress':'In Progress','uploaded':'Uploaded ✓','review':'Review','scheduled':'Scheduled','published':'Published'};
+  const [yr,mo,day] = dateStr.split('-').map(Number);
+  const dateLabel = new Date(yr,mo-1,day).toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'});
+
+  let html = `<div style="background:#FDF8F2;border:1.5px solid #A1786B;border-radius:16px;padding:16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:#2B2E2E">${dateLabel}</div>
+      <button onclick="toggleHaleyDayDetail('${dateStr}')" style="background:none;border:none;font-size:18px;color:#B5A187;cursor:pointer;padding:0;line-height:1">×</button>
+    </div>`;
+  
+  monthPosts.forEach(p => {
+    const s = p.haleyStatus || p.status || 'draft';
+    const notes = p.sharedNotes ? `<div style="font-size:11px;color:#594E42;margin-top:6px;padding-top:6px;border-top:1px solid #E8DDD4">${p.sharedNotes.substring(0,100)}${p.sharedNotes.length>100?'…':''}</div>` : '';
+    html += `<div style="background:#FCFAF5;border-radius:12px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:13px;font-weight:600;color:#2B2E2E;flex:1">${p.title}</div>
+        <div style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:7px;background:${statusColors[s]}22;color:${statusColors[s]};white-space:nowrap">${statusLabels[s]||s}</div>
+      </div>
+      <div style="font-size:11px;color:#B5A187;margin-top:3px">${p.format}</div>
+      ${notes}
+      <div style="margin-top:10px">
+        <select class="status-select" style="font-size:12px;padding:6px 10px" onchange="updateField('${p.id}','haleyStatus',this.value);renderHaleyCalendar()">
+          <option value="draft"${(p.haleyStatus||p.status||'draft')==='draft'?' selected':''}>Draft</option>
+          <option value="in-progress"${(p.haleyStatus||p.status||'draft')==='in-progress'?' selected':''}>In Progress</option>
+          <option value="uploaded"${(p.haleyStatus||p.status||'draft')==='uploaded'?' selected':''}>Content Uploaded ✓</option>
+        </select>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function renderCalendar() {
+  const container = document.getElementById('view-calendar');
+  let monthPosts = posts[currentMonth] || [];
+  
+  if(currentRole === 'haley') {
+    monthPosts = monthPosts.filter(p => p.owner === 'haley' || p.owner === 'both');
+  }
+
+  // Sort by date
+  monthPosts = [...monthPosts].sort((a,b) => new Date(a.date)-new Date(b.date));
+
+  let html = '';
+  
+  // Haley progress bar
+  if(currentRole === 'haley') {
+    const _monthPosts = monthPosts;
+    const _uploaded = _monthPosts.filter(p => (p.haleyStatus || p.status || 'draft') === 'uploaded').length;
+    const _goal = 8;
+    const _pct = Math.min(100, Math.round((_uploaded / _goal) * 100));
+    const _hit = _uploaded >= _goal;
+    html += `<div style="background:#FDF8F2;border:1.5px solid ${_hit ? '#5A8F6A' : '#D1B5AB'};border-radius:16px;padding:16px;margin-bottom:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:700;color:#2B2E2E">${MONTH_LABELS[currentMonth]} Progress</div>
+        <div style="font-size:13px;font-weight:700;color:${_hit ? '#5A8F6A' : '#A1786B'}">${_uploaded} / ${_goal} uploaded</div>
+      </div>
+      <div style="background:#E8DDD4;border-radius:99px;height:10px;overflow:hidden;margin-bottom:10px">
+        <div style="background:${_hit ? '#5A8F6A' : '#A1786B'};height:100%;width:${_pct}%;border-radius:99px"></div>
+      </div>
+      ${_hit ? \`<div style="display:flex;align-items:center;gap:8px;background:#5A8F6A18;border:1px solid #5A8F6A44;border-radius:12px;padding:12px 14px"><div style="font-size:18px">🎉</div><div><div style="font-size:13px;font-weight:700;color:#3A6B4A">You hit your ${_goal}-post goal!</div><div style="font-size:11px;color:#5A8F6A;margin-top:2px">Time to send your invoice to Dana 📧</div></div></div>\` : \`<div style="font-size:11px;color:#B5A187">${_goal - _uploaded} more post${_goal - _uploaded === 1 ? '' : 's'} to reach your ${_goal}-post contract goal</div>\`}
+    </div>`;
   }
 
   // Month Drive folder banner
