@@ -29,3 +29,10 @@ export default async function handler(req, res) {
 
   return res.status(400).json({ ok: false });
 }
+```
+
+Click **Commit changes**. Vercel will automatically redeploy in about 30 seconds.
+
+Then test it by visiting this URL in your browser:
+```
+https://atc-hub-sync-bj6a.vercel.app/api/sync
