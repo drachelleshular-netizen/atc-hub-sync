@@ -1056,7 +1056,7 @@ function renderCard(p) {
   dueDate.setDate(dueDate.getDate() - 7);
   const dueDateStr = dueDate.toLocaleDateString('en',{month:'short',day:'numeric'});
   const today = new Date(); today.setHours(0,0,0,0);
-  const isOverdue = dueDate < today && p.status !== 'uploaded' && p.status !== 'published';
+  const isOverdue = dueDate < today && (p.haleyStatus || p.status || 'draft') !== 'uploaded' && (p.danaStatus || p.status || 'draft') !== 'published';
   const isDueSoon = !isOverdue && dueDate >= today && (dueDate - today) / 86400000 <= 2;
 
   const dueDateBadge = isHaley ? `
@@ -1068,18 +1068,23 @@ function renderCard(p) {
       </div>
     </div>` : '';
   // Haley sees simplified statuses; Dana sees full set
+  // Each role has their own independent status field
+  const hs = p.haleyStatus || p.status || 'draft'; // haley's status (fallback to legacy status)
+  const ds = p.danaStatus || (p.status && !['draft','in-progress','uploaded'].includes(p.status) ? p.status : 'draft'); // dana's status
   const haleyStatusMap = {'in-progress':'s-inprogress In Progress','uploaded':'s-uploaded Uploaded ✓','draft':'s-draft Draft'};
   const danaStatusMap  = {published:'s-published Published',review:'s-review Review',draft:'s-draft Draft',scheduled:'s-scheduled Scheduled','in-progress':'s-inprogress In Progress',uploaded:'s-uploaded Uploaded ✓'};
+  // Badge shown on card: Dana's overall status takes priority if set beyond draft
+  const badgeStatus = (!isHaley && ds !== 'draft') ? ds : hs;
   const statusMap = isHaley ? haleyStatusMap : danaStatusMap;
-  const [sCls2, sLabel2] = (statusMap[p.status] || 's-draft Draft').split(' ');
+  const [sCls2, sLabel2] = (statusMap[badgeStatus] || 's-draft Draft').split(' ');
 
   const haleyStatusSelect = `
     <div class="field-row">
       <div class="field-label">Your Status</div>
-      <select class="status-select" onchange="updateField('${p.id}','status',this.value)">
-        <option value="draft"${p.status==='draft'?' selected':''}>Draft</option>
-        <option value="in-progress"${p.status==='in-progress'?' selected':''}>In Progress</option>
-        <option value="uploaded"${p.status==='uploaded'?' selected':''}>Content Uploaded ✓</option>
+      <select class="status-select" onchange="updateField('${p.id}','haleyStatus',this.value)">
+        <option value="draft"${hs==='draft'?' selected':''}>Draft</option>
+        <option value="in-progress"${hs==='in-progress'?' selected':''}>In Progress</option>
+        <option value="uploaded"${hs==='uploaded'?' selected':''}>Content Uploaded ✓</option>
       </select>
     </div>
     `;
@@ -1087,13 +1092,13 @@ function renderCard(p) {
   const danaStatusSelect = `
     <div class="field-row">
       <div class="field-label">Status</div>
-      <select class="status-select" onchange="updateField('${p.id}','status',this.value)">
-        <option value="draft"${p.status==='draft'?' selected':''}>Draft</option>
-        <option value="in-progress"${p.status==='in-progress'?' selected':''}>In Progress (Haley)</option>
-        <option value="uploaded"${p.status==='uploaded'?' selected':''}>Content Uploaded (Haley)</option>
-        <option value="review"${p.status==='review'?' selected':''}>Needs Review</option>
-        <option value="scheduled"${p.status==='scheduled'?' selected':''}>Scheduled</option>
-        <option value="published"${p.status==='published'?' selected':''}>Published</option>
+      <select class="status-select" onchange="updateField('${p.id}','danaStatus',this.value)">
+        <option value="draft"${ds==='draft'?' selected':''}>Draft</option>
+        <option value="in-progress"${ds==='in-progress'?' selected':''}>In Progress (Haley)</option>
+        <option value="uploaded"${ds==='uploaded'?' selected':''}>Content Uploaded (Haley)</option>
+        <option value="review"${ds==='review'?' selected':''}>Needs Review</option>
+        <option value="scheduled"${ds==='scheduled'?' selected':''}>Scheduled</option>
+        <option value="published"${ds==='published'?' selected':''}>Published</option>
       </select>
     </div>`;
 
@@ -1300,7 +1305,7 @@ function updateField(id, field, value) {
   if(post) { post[field] = value; saveData(); }
 
   // Re-render status badge
-  if(field === 'status') {
+  if(field === 'status' || field === 'haleyStatus' || field === 'danaStatus') {
     const card = document.getElementById('card-'+id);
     if(card) {
       const btn = card.querySelector('.status-btn');
@@ -1317,7 +1322,7 @@ function updateField(id, field, value) {
       btn.textContent = label;
     }
     // Notify Dana only when Haley marks Content Uploaded
-    if(currentRole === 'haley' && value === 'uploaded') {
+    if((field === 'haleyStatus' || field === 'status') && currentRole === 'haley' && value === 'uploaded') {
       setTimeout(() => notifyDana(post, value), 300);
     }
   }
@@ -1641,7 +1646,8 @@ function buildAnalytics() {
     const [_sy,_sm,_sd] = p.date.split('-').map(Number); const d = new Date(_sy, _sm-1, _sd);
     const dat = analytics[p.id] || {reach:'',saves:'',follows:'',profile:''};
     const statusMap = {published:'s-published Published',review:'s-review Needs Review',draft:'s-draft Draft',scheduled:'s-scheduled Scheduled','in-progress':'s-inprogress In Progress',uploaded:'s-uploaded Content Uploaded'};
-    const [sCls, sLabel] = (statusMap[p.status]||'s-draft Draft').split(' ');
+    const _bs = isHaley ? (p.haleyStatus||p.status||'draft') : (p.danaStatus||p.status||'draft');
+    const [sCls, sLabel] = (statusMap[_bs]||'s-draft Draft').split(' ');
     html += `
     <div class="analytics-card">
       <div class="ac-head" style="cursor:pointer" onclick="jumpToPost('${p.id}')">
