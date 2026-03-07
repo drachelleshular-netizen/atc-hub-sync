@@ -839,7 +839,7 @@ function loadData(callback) {
     .then(r => r.json())
     .then(data => {
       const remotePosts = data.posts;
-      if (remotePosts && remotePosts.length > 0) {
+      if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
         // Remote has real data — use it and update local cache
         posts = remotePosts;
         localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
