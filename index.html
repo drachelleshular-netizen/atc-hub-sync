@@ -389,6 +389,7 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
 <!-- ── HALEY BOTTOM NAV ── -->
 <div class="bottom-nav" id="haley-bottom-nav" style="display:none">
   <button class="bnav-btn active" id="hbnav-list" onclick="switchHaleyView('haley-list')"><span class="bnav-icon">📋</span><span class="bnav-label">My Posts</span></button>
+  <button class="bnav-btn" id="hbnav-links" onclick="switchView('links')"><span class="bnav-icon">🔗</span><span class="bnav-label">Links</span></button>
 </div>
 
 <!-- ── ADD POST MODAL ── -->
@@ -946,7 +947,7 @@ function setRole(role) {
   document.getElementById('refresh-btn').style.display = role === 'dana' ? 'block' : 'none';
   document.getElementById('bnav-analytics').style.display = role === 'dana' ? 'flex' : 'none';
   document.getElementById('bnav-campaign').style.display = role === 'dana' ? 'flex' : 'none';
-  document.getElementById('bnav-links').style.display = role === 'dana' ? 'flex' : 'none';
+  document.getElementById('bnav-links').style.display = 'flex';
   // Show calendar view properly (fixes blank on load)
   switchView('calendar');
   buildAnalytics();
@@ -991,7 +992,15 @@ function switchView(name) {
   document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
   document.getElementById('view-' + name).style.display = 'block';
   document.querySelectorAll('.bnav-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('bnav-' + name).classList.add('active');
+  const danaBtn = document.getElementById('bnav-' + name);
+  if(danaBtn) danaBtn.classList.add('active');
+  // Also handle haley nav active state
+  if(document.getElementById('hbnav-links')) {
+    document.getElementById('hbnav-links').classList.toggle('active', name === 'links');
+  }
+  if(document.getElementById('hbnav-list')) {
+    document.getElementById('hbnav-list').classList.toggle('active', name !== 'links');
+  }
   currentView = name;
   window.scrollTo(0, 0);
   if(name === 'calendar') renderCalendar();
