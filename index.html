@@ -247,7 +247,7 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
   <div class="rg-sub">Content Hub</div>
   <div class="rg-label">Who are you?</div>
   <div class="rg-btns">
-    <button class="rg-btn rg-btn-dana" onclick="setRole('dana')">
+    <button class="rg-btn rg-btn-dana" onclick="showPinPrompt()">
       <span class="rg-btn-name">Dana</span>
       <span class="rg-btn-role">Strategy · Full Access</span>
     </button>
@@ -255,6 +255,25 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
       <span class="rg-btn-name">Haley</span>
       <span class="rg-btn-role">Creator · My Posts Only</span>
     </button>
+  </div>
+</div>
+
+<!-- ── PIN OVERLAY ── -->
+<div id="pin-overlay" style="display:none;position:fixed;inset:0;background:rgba(43,46,46,0.55);z-index:9000;align-items:center;justify-content:center">
+  <div style="background:#FCFAF5;border-radius:22px;padding:32px 28px;width:300px;max-width:90vw;text-align:center;box-shadow:0 12px 40px rgba(89,78,66,0.2)">
+    <div style="font-size:28px;margin-bottom:6px">🔒</div>
+    <div style="font-family:'DM Sans',sans-serif;font-size:17px;font-weight:700;color:#2B2E2E;margin-bottom:4px">Dana's Access</div>
+    <div style="font-family:'DM Sans',sans-serif;font-size:13px;color:#B5A187;margin-bottom:20px">Enter your PIN to continue</div>
+    <input id="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4"
+      placeholder="••••"
+      style="width:100%;box-sizing:border-box;text-align:center;font-size:24px;letter-spacing:10px;padding:12px 16px;border:2px solid #D1B5AB;border-radius:14px;font-family:'DM Sans',sans-serif;color:#2B2E2E;background:#F5F2EC;outline:none;margin-bottom:10px"
+      onkeydown="if(event.key==='Enter')checkPin()"
+      oninput="clearPinError()">
+    <div id="pin-error" style="font-family:'DM Sans',sans-serif;font-size:12px;color:#B84040;min-height:18px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closePinPrompt()" style="flex:1;background:#D1B5AB;color:#594E42;border:none;border-radius:12px;padding:11px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer">Cancel</button>
+      <button onclick="checkPin()" style="flex:1;background:#A1786B;color:white;border:none;border-radius:12px;padding:11px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer">Enter</button>
+    </div>
   </div>
 </div>
 
@@ -867,6 +886,37 @@ function refreshData() {
     if(btn) btn.textContent = 'Refreshed!';
     setTimeout(() => { if(btn) btn.textContent = 'Refresh'; }, 1500);
   });
+}
+
+function showPinPrompt() {
+  const overlay = document.getElementById('pin-overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-error').textContent = '';
+  setTimeout(() => document.getElementById('pin-input').focus(), 100);
+}
+
+function closePinPrompt() {
+  document.getElementById('pin-overlay').style.display = 'none';
+}
+
+function clearPinError() {
+  document.getElementById('pin-error').textContent = '';
+}
+
+function checkPin() {
+  const entered = document.getElementById('pin-input').value.trim();
+  if (entered === '1007') {
+    closePinPrompt();
+    setRole('dana');
+  } else {
+    const input = document.getElementById('pin-input');
+    document.getElementById('pin-error').textContent = 'Incorrect PIN. Try again.';
+    input.value = '';
+    input.focus();
+    input.style.borderColor = '#B84040';
+    setTimeout(() => { input.style.borderColor = '#D1B5AB'; }, 1000);
+  }
 }
 
 function setRole(role) {
