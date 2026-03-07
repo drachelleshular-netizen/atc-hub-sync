@@ -90,10 +90,10 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
 .owner-dot-both{background:#B5A187}
 .card-tags{display:flex;gap:5px;flex-wrap:wrap}
 .tag{font-size:9px;font-weight:500;letter-spacing:0.07em;padding:2px 7px;border-radius:8px;text-transform:uppercase}
-.tag-reel{background:#EDE8E2;color:#594E42}
-.tag-carousel{background:#E5ECED;color:#4A6A72}
-.tag-talking{background:#EDE8E2;color:#6B5040}
-.tag-video{background:#EAE8E2;color:#594E42}
+.tag-reel{background:#F0EAE7;color:#7A4A3A}
+.tag-carousel{background:#E5ECED;color:#3A6A78}
+.tag-talking{background:#EEE8F2;color:#6A4A80}
+.tag-video{background:#E8F2EC;color:#3A6A50}
 .tag-p1{background:#F0EAE7;color:#594E42}
 .tag-p2{background:#E8ECEE;color:#5A7A84}
 .card-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
@@ -341,15 +341,6 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
     <div style="font-size:12px;color:var(--mocha)">Primary: San Francisco + Marin. City Hall as ceremony anchor.</div>
   </div>
 
-  <div class="sec-label">Content Pillars</div>
-  <div class="pillar">
-    <div class="pillar-title">Pillar 1 — SF Experience</div>
-    <div class="pillar-body">Reframes SF from chaotic → cinematic. Builds desire. Shows what's possible with intentional design.</div>
-    <ul class="ul-list"><li>City Hall → Marin arc</li><li>Architecture + coastline contrast</li><li>Six-hour pacing vs rushed coverage</li><li>"SF is underrated" positioning</li></ul>
-  </div>
-  <div class="pillar">
-    <div class="pillar-title">Pillar 2 — Planning Authority</div>
-    <div class="pillar-body">Builds trust. Exposes planning depth. Replaces uncertainty with clarity.</div>
     <ul class="ul-list"><li>Proposal walkthroughs</li><li>Vendor curation depth</li><li>Budget clarity (no price anchoring)</li><li>"Fully planned in 30 days"</li></ul>
   </div>
 
@@ -410,12 +401,7 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
         <option value="dana">Dana</option><option value="haley">Haley</option><option value="both">Both</option>
       </select>
     </div>
-    <div class="modal-field">
-      <div class="modal-label">Pillar</div>
-      <select class="modal-select" id="new-pillar">
-        <option value="p1">Pillar 1 — SF Experience</option><option value="p2">Pillar 2 — Planning Authority</option>
-      </select>
-    </div>
+    
     <div class="modal-field"><div class="modal-label">Notes</div><textarea class="modal-textarea" id="new-notes" placeholder="Notes for this post…"></textarea></div>
     <div class="modal-field"><div class="modal-label">Caption</div><textarea class="modal-textarea" id="new-caption" placeholder="Caption…" style="min-height:100px"></textarea></div>
     <div class="modal-actions">
@@ -428,7 +414,7 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
 <!-- ── ADD LINK MODAL ── -->
 <div class="modal-overlay" id="link-modal">
   <div class="modal">
-    <div class="modal-title">Add Asset Link</div>
+    <div class="modal-title" id="add-link-modal-title">Add Asset Link</div>
     <div class="modal-field">
       <div class="modal-label">Link Type</div>
       <div class="link-type-grid">
@@ -448,6 +434,7 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
       <div class="modal-label">URL</div>
       <input type="url" class="modal-input" id="link-url" placeholder="Paste link here…" inputmode="url">
     </div>
+    <input type="hidden" id="active-link-category" value="asset">
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeLinkModal()">Cancel</button>
       <button class="btn-primary" onclick="saveLink()">Add Link</button>
@@ -1384,17 +1371,21 @@ function renderCard(p) {
   const isHaley = currentRole === 'haley';
 
   const formatTagMap = {'Photo Reel':'tag-reel','Video Reel':'tag-video','Carousel':'tag-carousel','Talking Reel':'tag-talking'};
+  const formatEmojiMap = {'Photo Reel':'📸 Photo Reel','Video Reel':'🎬 Video Reel','Carousel':'🎠 Carousel','Talking Reel':'🎙️ Talking Reel'};
   const fTag = formatTagMap[p.format] || 'tag-reel';
-  const pillarTag = p.pillar === 'p1' ? '<span class="tag tag-p1">SF Exp.</span>' : '<span class="tag tag-p2">Authority</span>';
+  const fLabel = formatEmojiMap[p.format] || p.format;
+  const pillarTag = '';
   const ownerDot = p.owner === 'dana' ? 'owner-dot-dana' : p.owner === 'haley' ? 'owner-dot-haley' : 'owner-dot-both';
   const ownerLabel = p.owner === 'dana' ? 'Dana' : p.owner === 'haley' ? 'Haley' : 'Both';
 
   const linkIcons = {drive:'📁 li-drive', canva:'🎨 li-canva', gallery:'📸 li-gallery', doc:'📋 li-doc', dropbox:'📦 li-drive', ig:'📱 li-gallery'};
-  const linksHtml = (p.links||[]).map((l,li) => {
+  const renderLinkRow = (l, li) => {
     const [icon, cls] = (linkIcons[l.type]||'🔗 li-doc').split(' ');
     const removeBtn = `<button onclick="removeLink('${p.id}',${li})" style="background:none;border:none;color:var(--stone);font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;margin-left:4px">×</button>`;
     return `<a href="${l.url}" target="_blank" class="link-item" style="text-decoration:none"><div class="link-icon ${cls}">${icon}</div><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.label}</span>${removeBtn}</a>`;
-  }).join('');
+  };
+  const assetLinksHtml = (p.links||[]).filter(l => !l.category || l.category === 'asset').map(renderLinkRow).join('');
+  const completedLinksHtml = (p.links||[]).filter(l => l.category === 'completed').map(renderLinkRow).join('');
 
   // Owner editor (Dana only gets dropdown)
   const ownerEditor = !isHaley ? `
@@ -1554,8 +1545,7 @@ function renderCard(p) {
         <div class="owner-dot ${ownerDot}" title="${ownerLabel}" style="flex-shrink:0"></div>
       </div>
       <div class="card-tags">
-        <span class="tag ${fTag}">${p.format}</span>
-        ${pillarTag}
+        <span class="tag ${fTag}">${fLabel}</span>
         ${isHaley ? `<span style="font-size:9px;font-weight:600;letter-spacing:0.05em;padding:2px 7px;border-radius:8px;background:${isOverdue ? 'rgba(184,64,64,0.1)' : 'rgba(184,194,199,0.25)'};color:${isOverdue ? '#B84040' : '#594E42'}">${isOverdue ? '⚠️ ' : ''}Due ${dueDateStr}</span>` : ''}
         ${(!isHaley && totalMins > 0) ? `<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:8px;background:rgba(181,161,135,0.2);color:#594E42">⏱ ${fmtTime(totalMins)}</span>` : ''}
       </div>
@@ -1619,10 +1609,16 @@ function renderCard(p) {
     ${timeSection}
     ${captionSection}
     <div class="field-row">
-      <div class="field-label">Asset Links
-        <button class="field-edit-btn" onclick="openLinkModal('${p.id}')">＋ Add Link</button>
+      <div class="field-label">📎 Asset Links
+        <button class="field-edit-btn" onclick="openLinkModal('${p.id}','asset')">＋ Add</button>
       </div>
-      <div class="link-list" id="links-${p.id}">${linksHtml || '<div style="font-size:12px;color:var(--stone);padding:6px 0">No links yet — tap Add Link to attach a Drive folder, Canva, gallery, or any URL.</div>'}</div>
+      <div class="link-list" id="links-asset-${p.id}">${assetLinksHtml || '<div style="font-size:12px;color:var(--stone);padding:6px 0">Working files — Drive folders, Canva templates, galleries.</div>'}</div>
+    </div>
+    <div class="field-row">
+      <div class="field-label">✅ Completed Content
+        <button class="field-edit-btn" onclick="openLinkModal('${p.id}','completed')">＋ Add</button>
+      </div>
+      <div class="link-list" id="links-completed-${p.id}">${completedLinksHtml || '<div style="font-size:12px;color:var(--stone);padding:6px 0">Final uploaded content — Instagram posts, Drive exports, finished files.</div>'}</div>
     </div>
   </div>
 </div>`;
@@ -1812,9 +1808,12 @@ function launchConfetti() {
 let activeLinkPostId = null;
 let activeLinkType = 'drive';
 
-function openLinkModal(postId) {
+function openLinkModal(postId, category) {
   activeLinkPostId = postId;
   activeLinkType = 'drive';
+  const cat = category || 'asset';
+  document.getElementById('active-link-category').value = cat;
+  document.getElementById('add-link-modal-title').textContent = cat === 'completed' ? '✅ Add Completed Content' : '📎 Add Asset Link';
   document.getElementById('link-label').value = '';
   document.getElementById('link-url').value = '';
   document.querySelectorAll('.link-type-btn').forEach(b => b.classList.remove('selected'));
@@ -1836,7 +1835,8 @@ function saveLink() {
   const post = posts[currentMonth].find(p => p.id === activeLinkPostId);
   if(!post) return;
   if(!post.links) post.links = [];
-  post.links.push({ label, url, type: activeLinkType });
+  const cat = document.getElementById('active-link-category').value || 'asset';
+  post.links.push({ label, url, type: activeLinkType, category: cat });
   saveData();
   refreshLinks(activeLinkPostId, post.links);
   closeLinkModal();
@@ -1886,17 +1886,21 @@ function removeLink(postId, linkIndex) {
   });
 }
 function refreshLinks(postId, links) {
-  const container = document.getElementById('links-'+postId);
-  if(!container) return;
+  const assetEl = document.getElementById('links-asset-'+postId);
+  const completedEl = document.getElementById('links-completed-'+postId);
   const linkIcons = {drive:'📁 li-drive', canva:'🎨 li-canva', gallery:'📸 li-gallery', doc:'📋 li-doc', dropbox:'📦 li-drive', ig:'📱 li-gallery'};
-  if(!links.length) {
-    container.innerHTML = '<div style="font-size:12px;color:var(--stone);padding:6px 0">No links yet — tap Add Link to attach a Drive folder, Canva file, Dropbox, gallery, or any URL.</div>';
-    return;
-  }
-  container.innerHTML = links.map((l,li) => {
+  const renderRow = (l, li) => {
     const [icon, cls] = (linkIcons[l.type]||'🔗 li-doc').split(' ');
     return `<a href="${l.url}" target="_blank" class="link-item" style="text-decoration:none"><div class="link-icon ${cls}">${icon}</div><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.label}</span><button onclick="event.preventDefault();removeLink('${postId}',${li})" style="background:none;border:none;color:var(--stone);font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;margin-left:4px">×</button></a>`;
-  }).join('');
+  };
+  if(assetEl) {
+    const aLinks = links.filter(l => !l.category || l.category === 'asset');
+    assetEl.innerHTML = aLinks.length ? aLinks.map((l,li) => renderRow(l, links.indexOf(l))).join('') : '<div style="font-size:12px;color:var(--stone);padding:6px 0">Working files — Drive folders, Canva templates, galleries.</div>';
+  }
+  if(completedEl) {
+    const cLinks = links.filter(l => l.category === 'completed');
+    completedEl.innerHTML = cLinks.length ? cLinks.map((l,li) => renderRow(l, links.indexOf(l))).join('') : '<div style="font-size:12px;color:var(--stone);padding:6px 0">Final uploaded content — Instagram posts, Drive exports, finished files.</div>';
+  }
 }
 
 // ====
@@ -1917,7 +1921,7 @@ function saveNewPost() {
     date, title,
     format: document.getElementById('new-format').value,
     owner: document.getElementById('new-owner').value,
-    pillar: document.getElementById('new-pillar').value,
+    
     status: 'draft',
     notes: document.getElementById('new-notes').value,
     caption: document.getElementById('new-caption').value,
