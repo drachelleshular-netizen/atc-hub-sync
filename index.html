@@ -1037,7 +1037,7 @@ function getWeekGroup(date, month) {
   // Use real calendar weeks (Sunday-start) so week labels match the calendar grid
   const [y, m, day] = date.split('-').map(Number);
   const firstDow = new Date(y, m - 1, 1).getDay(); // 0=Sun of month's first day
-  return Math.min(Math.floor((day - 1 + firstDow) / 7), 3);
+  return Math.min(Math.floor((day - 1 + firstDow) / 7), 4); // up to Week 5
 }
 
 const DRIVE_FOLDERS = {
@@ -1252,7 +1252,7 @@ function renderCalendar() {
   </div>`;
 
   // Group by week
-  const groups = [[],[],[],[]];
+  const groups = [[],[],[],[],[]];
   monthPosts.forEach(p => groups[getWeekGroup(p.date, currentMonth)].push(p));
 
   groups.forEach((group, wi) => {
