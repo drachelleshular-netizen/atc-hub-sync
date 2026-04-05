@@ -410,12 +410,6 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
         <option value="dana">Dana</option><option value="haley">Haley</option><option value="both">Both</option>
       </select>
     </div>
-    <div class="modal-field">
-      <div class="modal-label">Pillar</div>
-      <select class="modal-select" id="new-pillar">
-        <option value="p1">Pillar 1 — SF Experience</option><option value="p2">Pillar 2 — Planning Authority</option>
-      </select>
-    </div>
     <div class="modal-field"><div class="modal-label">Notes</div><textarea class="modal-textarea" id="new-notes" placeholder="Notes for this post…"></textarea></div>
     <div class="modal-field"><div class="modal-label">Caption</div><textarea class="modal-textarea" id="new-caption" placeholder="Caption…" style="min-height:100px"></textarea></div>
     <div class="modal-actions">
@@ -1275,7 +1269,6 @@ function renderCard(p) {
 
   const formatTagMap = {'Photo Reel':'tag-reel','Video Reel':'tag-video','Carousel':'tag-carousel','Talking Reel':'tag-talking'};
   const fTag = formatTagMap[p.format] || 'tag-reel';
-  const pillarTag = p.pillar === 'p1' ? '<span class="tag tag-p1">SF Exp.</span>' : '<span class="tag tag-p2">Authority</span>';
   const ownerDot = p.owner === 'dana' ? 'owner-dot-dana' : p.owner === 'haley' ? 'owner-dot-haley' : 'owner-dot-both';
   const ownerLabel = p.owner === 'dana' ? 'Dana' : p.owner === 'haley' ? 'Haley' : 'Both';
 
@@ -1446,7 +1439,6 @@ function renderCard(p) {
       </div>
       <div class="card-tags">
         <span class="tag ${fTag}">${p.format}</span>
-        ${pillarTag}
         ${isHaley ? `<span style="font-size:9px;font-weight:600;letter-spacing:0.05em;padding:2px 7px;border-radius:8px;background:${isOverdue ? 'rgba(184,64,64,0.1)' : 'rgba(184,194,199,0.25)'};color:${isOverdue ? '#B84040' : '#594E42'}">${isOverdue ? '⚠️ ' : ''}Due ${dueDateStr}</span>` : ''}
         ${(!isHaley && totalMins > 0) ? `<span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:8px;background:rgba(181,161,135,0.2);color:#594E42">⏱ ${fmtTime(totalMins)}</span>` : ''}
       </div>
@@ -1487,23 +1479,14 @@ function renderCard(p) {
     ${isHaley ? haleyStatusSelect : danaStatusSelect}
     ${isHaley ? '' : ownerEditor}
     ${!isHaley ? `
-    <div style="display:flex;gap:8px">
-      <div class="field-row" style="flex:1">
-        <div class="field-label">Format</div>
-        <select class="status-select" onchange="updateField('${p.id}','format',this.value);rerenderCard('${p.id}')">
-          <option${p.format==='Photo Reel'?' selected':''}>Photo Reel</option>
-          <option${p.format==='Video Reel'?' selected':''}>Video Reel</option>
-          <option${p.format==='Carousel'?' selected':''}>Carousel</option>
-          <option${p.format==='Talking Reel'?' selected':''}>Talking Reel</option>
-        </select>
-      </div>
-      <div class="field-row" style="flex:1">
-        <div class="field-label">Pillar</div>
-        <select class="status-select" onchange="updateField('${p.id}','pillar',this.value);rerenderCard('${p.id}')">
-          <option value="p1"${p.pillar==='p1'?' selected':''}>SF Experience</option>
-          <option value="p2"${p.pillar==='p2'?' selected':''}>Authority</option>
-        </select>
-      </div>
+    <div class="field-row">
+      <div class="field-label">Format</div>
+      <select class="status-select" onchange="updateField('${p.id}','format',this.value);rerenderCard('${p.id}')">
+        <option${p.format==='Photo Reel'?' selected':''}>Photo Reel</option>
+        <option${p.format==='Video Reel'?' selected':''}>Video Reel</option>
+        <option${p.format==='Carousel'?' selected':''}>Carousel</option>
+        <option${p.format==='Talking Reel'?' selected':''}>Talking Reel</option>
+      </select>
     </div>` : ''}
     ${sharedNotes}
     ${privateNotes}
