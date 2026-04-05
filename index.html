@@ -853,8 +853,9 @@ function saveAnalytics() {
 }
 
 function loadData(callback) {
-  // Step 1: Always load local/default data instantly so UI never shows blank
+  // Step 1: Always load local data instantly — localStorage is source of truth
   const localSaved = localStorage.getItem('atc-posts-v2');
+  const hasLocal = !!localSaved;
   if (localSaved) {
     try { posts = JSON.parse(localSaved); } catch(e) { posts = JSON.parse(JSON.stringify(DEFAULT_POSTS)); }
   } else {
@@ -864,26 +865,33 @@ function loadData(callback) {
   loadLinkSections();
   if(callback) callback(); // render immediately with local data
 
-  // Step 2: Fetch from Vercel proxy in background for cross-device sync
-  fetch(SYNC_URL)
-    .then(r => r.json())
-    .then(data => {
-      const remotePosts = data.posts;
-      if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
-        // Remote has real data — update local cache silently
-        // Only use remote data if it has more posts or if this is the initial load (callback set)
-        posts = remotePosts;
-        localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
-        if(callback) callback(); // initial load only — re-render is safe here
-        // Never re-render in the background — avoids wiping out active edits
-      } else {
-        // Remote is empty — seed it with our current posts
-        saveData();
-      }
-    })
-    .catch(() => {
-      // Network error — local data already loaded, carry on
-    });
+  // Step 2: Only pull from server if there is NO local data (first-time / new device)
+  // If localStorage already has data, it's more current than the server — skip the GET
+  if(!hasLocal) {
+    fetch(SYNC_URL)
+      .then(r => r.json())
+      .then(data => {
+        const remotePosts = data.posts;
+        if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
+          posts = remotePosts;
+          localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
+          if(callback) callback();
+        } else {
+          saveData(); // seed server with defaults
+        }
+      })
+      .catch(() => {});
+  }
+  // Always push current state to server to keep it updated
+  else {
+    setTimeout(() => {
+      fetch(SYNC_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posts: posts })
+      }).catch(() => {});
+    }, 1000);
+  }
 }
 
 // ══════════════════════════════════════════════
