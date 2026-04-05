@@ -287,9 +287,9 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
     </div>
   </div>
   <div class="month-tabs">
-    <button class="month-tab active" onclick="switchMonth('mar',this)">March</button>
-    <button class="month-tab" onclick="switchMonth('apr',this)">April</button>
-    <button class="month-tab" onclick="switchMonth('may',this)">May</button>
+    <button class="month-tab" id="tab-mar" onclick="switchMonth('mar',this)">March</button>
+    <button class="month-tab" id="tab-apr" onclick="switchMonth('apr',this)">April</button>
+    <button class="month-tab" id="tab-may" onclick="switchMonth('may',this)">May</button>
   </div>
 </div>
 
@@ -817,7 +817,16 @@ City Hall gives you the ceremony. San Francisco gives you everything around it. 
 // ══════════════════════════════════════════════
 let currentRole = null;
 let currentView = 'calendar';
-let currentMonth = 'mar';
+
+// Set current month based on today's date
+function getDefaultMonth() {
+  const mo = new Date().getMonth() + 1; // 1-12
+  if(mo <= 3) return 'mar';
+  if(mo <= 4) return 'apr';
+  return 'may';
+}
+let currentMonth = getDefaultMonth();
+
 let posts = {};
 let analytics = {};
 
@@ -1986,6 +1995,12 @@ window.addEventListener('scroll', () => {
 loadData(); // preload local data on init
 // All views hidden until role selected
 document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+// Set active month tab to current month
+(function(){
+  document.querySelectorAll('.month-tab').forEach(t => t.classList.remove('active'));
+  const activeTab = document.getElementById('tab-' + currentMonth);
+  if(activeTab) activeTab.classList.add('active');
+})();
 
 // ── TITLE DIRTY TRACKING ──
 // Tracks unsaved title edits so beforeunload can flush them
