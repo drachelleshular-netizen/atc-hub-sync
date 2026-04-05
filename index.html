@@ -870,11 +870,12 @@ function loadData(callback) {
     .then(data => {
       const remotePosts = data.posts;
       if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
-        // Remote has real data — use it and update local cache
+        // Remote has real data — update local cache silently
+        // Only use remote data if it has more posts or if this is the initial load (callback set)
         posts = remotePosts;
         localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
-        if(callback) callback();
-        else if(!document.activeElement || !document.activeElement.classList.contains('title-editable')) renderCalendar();
+        if(callback) callback(); // initial load only — re-render is safe here
+        // Never re-render in the background — avoids wiping out active edits
       } else {
         // Remote is empty — seed it with our current posts
         saveData();
