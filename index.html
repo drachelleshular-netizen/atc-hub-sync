@@ -830,11 +830,13 @@ let analytics = {};
 const SYNC_URL = 'https://atc-hub-sync.vercel.app/api/sync';
 
 function saveData() {
+  const ts = Date.now();
   localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
+  localStorage.setItem('atc-posts-ts', String(ts));
   fetch(SYNC_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ posts: posts })
+    body: JSON.stringify({ posts: posts, savedAt: ts })
   })
   .then(r => r.json())
   .then(data => {
@@ -853,9 +855,9 @@ function saveAnalytics() {
 }
 
 function loadData(callback) {
-  // Step 1: Always load local data instantly — localStorage is source of truth
+  // Step 1: Load local data instantly for immediate render
   const localSaved = localStorage.getItem('atc-posts-v2');
-  const hasLocal = !!localSaved;
+  const localTs = parseInt(localStorage.getItem('atc-posts-ts') || '0');
   if (localSaved) {
     try { posts = JSON.parse(localSaved); } catch(e) { posts = JSON.parse(JSON.stringify(DEFAULT_POSTS)); }
   } else {
@@ -863,35 +865,39 @@ function loadData(callback) {
   }
   analytics = JSON.parse(localStorage.getItem('atc-analytics-v2') || '{}');
   loadLinkSections();
-  if(callback) callback(); // render immediately with local data
+  if(callback) callback(); // render immediately
 
-  // Step 2: Only pull from server if there is NO local data (first-time / new device)
-  // If localStorage already has data, it's more current than the server — skip the GET
-  if(!hasLocal) {
-    fetch(SYNC_URL)
-      .then(r => r.json())
-      .then(data => {
-        const remotePosts = data.posts;
-        if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
+  // Step 2: Always fetch from server — use server data if it's NEWER than local
+  // This keeps multiple browsers in sync without losing recent edits
+  fetch(SYNC_URL)
+    .then(r => r.json())
+    .then(data => {
+      const remotePosts = data.posts;
+      const remoteTs = data.savedAt || 0;
+      if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
+        if (remoteTs >= localTs) {
+          // Server is newer (or same) — use server data
           posts = remotePosts;
           localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
-          if(callback) callback();
-        } else {
-          saveData(); // seed server with defaults
+          localStorage.setItem('atc-posts-ts', String(remoteTs));
+          if(callback) callback(); // re-render with fresh data
         }
-      })
-      .catch(() => {});
-  }
-  // Always push current state to server to keep it updated
-  else {
-    setTimeout(() => {
-      fetch(SYNC_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ posts: posts })
-      }).catch(() => {});
-    }, 1000);
-  }
+        // else: local is newer — keep local, push it up silently
+        else {
+          fetch(SYNC_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ posts: posts, savedAt: localTs })
+          }).catch(() => {});
+        }
+      } else {
+        // Server is empty — seed it
+        saveData();
+      }
+    })
+    .catch(() => {
+      // Network error — local data already loaded, carry on
+    });
 }
 
 // ══════════════════════════════════════════════
@@ -1431,7 +1437,8 @@ function renderCard(p) {
       <div class="card-title-row">
         <div class="title-edit-wrap" onclick="event.stopPropagation()">
           <input class="title-editable" value="${p.title}" 
-            onblur="updateField('${p.id}','title',this.value)"
+            onblur="updateField('${p.id}','title',this.value.trim()||this.defaultValue)"
+            oninput="markTitleDirty('${p.id}',this.value)"
             title="Tap to edit title">
           <span class="title-edit-icon">✏️</span>
         </div>
@@ -1795,7 +1802,8 @@ function closeModal() {
 function saveNewPost() {
   const date = document.getElementById('new-date').value;
   const title = document.getElementById('new-title').value.trim();
-  if(!date || !title) { toast('Please fill in date and title'); return; }
+  if(!date) { toast('Please fill in a date'); return; }
+  if(!title) { toast('Please add a title before saving'); return; }
   const newPost = {
     id: 'custom-' + Date.now(),
     date, title,
@@ -1995,6 +2003,25 @@ window.addEventListener('scroll', () => {
 loadData(); // preload local data on init
 // All views hidden until role selected
 document.querySelectorAll('.view').forEach(v => v.style.display = 'none');
+
+// ── TITLE DIRTY TRACKING ──
+// Tracks unsaved title edits so beforeunload can flush them
+let _dirtyTitle = null;
+function markTitleDirty(id, value) {
+  _dirtyTitle = { id, value };
+}
+// On any page unload, flush dirty title to localStorage immediately
+window.addEventListener('beforeunload', () => {
+  if(_dirtyTitle) {
+    const post = posts[currentMonth].find(p => p.id === _dirtyTitle.id);
+    if(post && _dirtyTitle.value.trim()) {
+      post.title = _dirtyTitle.value.trim();
+      localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
+    }
+    _dirtyTitle = null;
+  }
+});
+
 </script>
 </body>
 </html>
