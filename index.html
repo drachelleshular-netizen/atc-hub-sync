@@ -1281,11 +1281,13 @@ function renderCard(p) {
   const ownerLabel = p.owner === 'dana' ? 'Dana' : p.owner === 'haley' ? 'Haley' : 'Both';
 
   const linkIcons = {drive:'📁 li-drive', canva:'🎨 li-canva', gallery:'📸 li-gallery', doc:'📋 li-doc', dropbox:'📦 li-drive', ig:'📱 li-gallery'};
-  const linksHtml = (p.links||[]).map((l,li) => {
+  const renderLR = (l,li) => {
     const [icon, cls] = (linkIcons[l.type]||'🔗 li-doc').split(' ');
     const removeBtn = `<button onclick="removeLink('${p.id}',${li})" style="background:none;border:none;color:var(--stone);font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;margin-left:4px">×</button>`;
     return `<a href="${l.url}" target="_blank" class="link-item" style="text-decoration:none"><div class="link-icon ${cls}">${icon}</div><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.label}</span>${removeBtn}</a>`;
-  }).join('');
+  };
+  const assetLinksHtml = (p.links||[]).filter(l => !l.category || l.category === 'asset').map(renderLR).join('');
+  const completedLinksHtml = (p.links||[]).filter(l => l.category === 'completed').map(renderLR).join('');
 
   // Owner editor (Dana only gets dropdown)
   const ownerEditor = !isHaley ? `
@@ -1484,6 +1486,13 @@ function renderCard(p) {
   <div class="card-body" id="body-${p.id}">
     <div class="cb-divider"></div>
     ${dueDateBadge}
+    ${!isHaley ? `
+    <div class="field-row">
+      <div class="field-label">Date</div>
+      <input type="date" class="editable-input" value="${p.date}"
+        style="max-width:160px;-webkit-appearance:none;appearance:none;box-sizing:border-box;overflow:hidden"
+        onchange="updateField('${p.id}','date',this.value);rerenderCard('${p.id}')">
+    </div>` : ''}
     ${isHaley ? haleyStatusSelect : danaStatusSelect}
     ${isHaley ? '' : ownerEditor}
     ${!isHaley ? `
@@ -1501,10 +1510,16 @@ function renderCard(p) {
     ${timeSection}
     ${captionSection}
     <div class="field-row">
-      <div class="field-label">Asset Links
-        <button class="field-edit-btn" onclick="openLinkModal('${p.id}')">＋ Add Link</button>
+      <div class="field-label">📎 Asset Links
+        <button class="field-edit-btn" onclick="openLinkModal('${p.id}','asset')">＋ Add</button>
       </div>
-      <div class="link-list" id="links-${p.id}">${linksHtml || '<div style="font-size:12px;color:var(--stone);padding:6px 0">No links yet — tap Add Link to attach a Drive folder, Canva, gallery, or any URL.</div>'}</div>
+      <div class="link-list" id="links-asset-${p.id}">${assetLinksHtml || '<div style="font-size:12px;color:var(--stone);padding:6px 0">Working files — Drive folders, Canva templates, galleries.</div>'}</div>
+    </div>
+    <div class="field-row">
+      <div class="field-label">✅ Completed Content
+        <button class="field-edit-btn" onclick="openLinkModal('${p.id}','completed')">＋ Add</button>
+      </div>
+      <div class="link-list" id="links-completed-${p.id}">${completedLinksHtml || '<div style="font-size:12px;color:var(--stone);padding:6px 0">Final uploaded content — Instagram posts, Drive exports, finished files.</div>'}</div>
     </div>
   </div>
 </div>`;
@@ -1709,9 +1724,12 @@ function launchConfetti() {
 let activeLinkPostId = null;
 let activeLinkType = 'drive';
 
-function openLinkModal(postId) {
+function openLinkModal(postId, category) {
   activeLinkPostId = postId;
   activeLinkType = 'drive';
+  const cat = category || 'asset';
+  document.getElementById('active-link-category').value = cat;
+  document.getElementById('add-link-modal-title').textContent = cat === 'completed' ? '✅ Add Completed Content' : '📎 Add Asset Link';
   document.getElementById('link-label').value = '';
   document.getElementById('link-url').value = '';
   document.querySelectorAll('.link-type-btn').forEach(b => b.classList.remove('selected'));
@@ -1733,7 +1751,8 @@ function saveLink() {
   const post = posts[currentMonth].find(p => p.id === activeLinkPostId);
   if(!post) return;
   if(!post.links) post.links = [];
-  post.links.push({ label, url, type: activeLinkType });
+  const cat = document.getElementById('active-link-category').value || 'asset';
+  post.links.push({ label, url, type: activeLinkType, category: cat });
   saveData();
   refreshLinks(activeLinkPostId, post.links);
   closeLinkModal();
@@ -1783,17 +1802,17 @@ function removeLink(postId, linkIndex) {
   });
 }
 function refreshLinks(postId, links) {
-  const container = document.getElementById('links-'+postId);
-  if(!container) return;
   const linkIcons = {drive:'📁 li-drive', canva:'🎨 li-canva', gallery:'📸 li-gallery', doc:'📋 li-doc', dropbox:'📦 li-drive', ig:'📱 li-gallery'};
-  if(!links.length) {
-    container.innerHTML = '<div style="font-size:12px;color:var(--stone);padding:6px 0">No links yet — tap Add Link to attach a Drive folder, Canva file, Dropbox, gallery, or any URL.</div>';
-    return;
-  }
-  container.innerHTML = links.map((l,li) => {
+  const renderRow = (l, li) => {
     const [icon, cls] = (linkIcons[l.type]||'🔗 li-doc').split(' ');
     return `<a href="${l.url}" target="_blank" class="link-item" style="text-decoration:none"><div class="link-icon ${cls}">${icon}</div><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.label}</span><button onclick="event.preventDefault();removeLink('${postId}',${li})" style="background:none;border:none;color:var(--stone);font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0;margin-left:4px">×</button></a>`;
-  }).join('');
+  };
+  const assetEl = document.getElementById('links-asset-'+postId);
+  const completedEl = document.getElementById('links-completed-'+postId);
+  const aLinks = links.filter(l => !l.category || l.category === 'asset');
+  const cLinks = links.filter(l => l.category === 'completed');
+  if(assetEl) assetEl.innerHTML = aLinks.length ? aLinks.map(renderRow).join('') : '<div style="font-size:12px;color:var(--stone);padding:6px 0">Working files — Drive folders, Canva templates, galleries.</div>';
+  if(completedEl) completedEl.innerHTML = cLinks.length ? cLinks.map(renderRow).join('') : '<div style="font-size:12px;color:var(--stone);padding:6px 0">Final uploaded content — Instagram posts, Drive exports, finished files.</div>';
 }
 
 // ══════════════════════════════════════════════
