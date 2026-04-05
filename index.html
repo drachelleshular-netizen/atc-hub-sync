@@ -957,7 +957,7 @@ function setRole(role) {
   document.getElementById('bottom-nav').style.display = role === 'dana' ? 'flex' : 'none';
   document.getElementById('haley-bottom-nav').style.display = role === 'haley' ? 'flex' : 'none';
   // Remove bottom padding for Haley since she has no nav bar
-  document.querySelectorAll('.view').forEach(v => v.style.paddingBottom = role === 'dana' ? '' : '24px');
+  document.querySelectorAll('.view').forEach(v => v.style.paddingBottom = '');
   const pill = document.getElementById('role-pill');
   pill.textContent = role === 'dana' ? 'Dana' : 'Haley';
   pill.className = 'role-pill ' + (role === 'dana' ? 'role-pill-dana' : 'role-pill-haley');
