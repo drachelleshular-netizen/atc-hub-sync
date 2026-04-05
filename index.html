@@ -422,7 +422,7 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
 <!-- ── ADD LINK MODAL ── -->
 <div class="modal-overlay" id="link-modal">
   <div class="modal">
-    <div class="modal-title">Add Asset Link</div>
+    <div class="modal-title" id="add-link-modal-title">Add Asset Link</div>
     <div class="modal-field">
       <div class="modal-label">Link Type</div>
       <div class="link-type-grid">
@@ -442,6 +442,7 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
       <div class="modal-label">URL</div>
       <input type="url" class="modal-input" id="link-url" placeholder="Paste link here…" inputmode="url">
     </div>
+    <input type="hidden" id="active-link-category" value="asset">
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeLinkModal()">Cancel</button>
       <button class="btn-primary" onclick="saveLink()">Add Link</button>
