@@ -483,6 +483,13 @@ body{font-family:'DM Sans',sans-serif;background:#FCFAF5;color:#594E42;min-heigh
 
 <script>
 // ══════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════
+function escHtml(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ══════════════════════════════════════════════
 // DATA
 // ══════════════════════════════════════════════
 
@@ -1430,8 +1437,8 @@ function renderCard(p) {
     <div class="card-info">
       <div class="card-title-row">
         <div class="title-edit-wrap" onclick="event.stopPropagation()">
-          <input class="title-editable" value="${p.title}" 
-            onblur="updateField('${p.id}','title',this.value.trim()||this.defaultValue)"
+          <input class="title-editable" value="${escHtml(p.title||'')}" 
+            onblur="updateField('${p.id}','title',this.value.trim()||p.title)"
             oninput="markTitleDirty('${p.id}',this.value)"
             title="Tap to edit title">
           <span class="title-edit-icon">✏️</span>
