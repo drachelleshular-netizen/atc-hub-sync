@@ -9,7 +9,9 @@ export default async function handler(req, res) {
   const URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
   if (req.method === 'GET') {
-    const r = await fetch(`${URL}/latest`, { headers: { 'X-Master-Key': BIN_KEY } });
+    const r = await fetch(`${URL}/latest`, {
+      headers: { 'X-Master-Key': BIN_KEY }
+    });
     const data = await r.json();
     return res.status(200).json(data.record || {});
   }
@@ -17,10 +19,17 @@ export default async function handler(req, res) {
   if (req.method === 'POST') {
     const r = await fetch(URL, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': BIN_KEY },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': BIN_KEY,
+        'X-Bin-Versioning': 'false'
+      },
       body: JSON.stringify(req.body)
     });
     const data = await r.json();
+    if (!r.ok) {
+      return res.status(500).json({ ok: false, error: data });
+    }
     return res.status(200).json({ ok: true });
   }
 }
