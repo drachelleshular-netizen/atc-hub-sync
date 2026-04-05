@@ -833,13 +833,11 @@ let analytics = {};
 const SYNC_URL = 'https://atc-hub-sync.vercel.app/api/sync';
 
 function saveData() {
-  const ts = Date.now();
   localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
-  localStorage.setItem('atc-posts-ts', String(ts));
   fetch(SYNC_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ posts: posts, savedAt: ts })
+    body: JSON.stringify({ posts: posts })
   })
   .then(r => r.json())
   .then(data => {
@@ -860,7 +858,6 @@ function saveAnalytics() {
 function loadData(callback) {
   // Step 1: Load local data instantly for immediate render
   const localSaved = localStorage.getItem('atc-posts-v2');
-  const localTs = parseInt(localStorage.getItem('atc-posts-ts') || '0');
   if (localSaved) {
     try { posts = JSON.parse(localSaved); } catch(e) { posts = JSON.parse(JSON.stringify(DEFAULT_POSTS)); }
   } else {
@@ -868,39 +865,34 @@ function loadData(callback) {
   }
   analytics = JSON.parse(localStorage.getItem('atc-analytics-v2') || '{}');
   loadLinkSections();
-  if(callback) callback(); // render immediately
+  if(callback) callback(); // render immediately with local data
 
-  // Step 2: Always fetch from server — use server data if it's NEWER than local
-  // This keeps multiple browsers in sync without losing recent edits
+  // Step 2: Fetch from server for cross-device sync
   fetch(SYNC_URL)
     .then(r => r.json())
     .then(data => {
       const remotePosts = data.posts;
-      const remoteTs = data.savedAt || 0;
       if (remotePosts && typeof remotePosts === 'object' && Object.keys(remotePosts).length > 0) {
-        if (remoteTs >= localTs) {
-          // Server is newer (or same) — use server data
-          posts = remotePosts;
-          localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
-          localStorage.setItem('atc-posts-ts', String(remoteTs));
-          if(callback) callback(); // re-render with fresh data
+        // Merge: protect any post edited this session from being overwritten
+        if(_sessionEdited.size > 0) {
+          for(const month of Object.keys(remotePosts)) {
+            if(!posts[month]) continue;
+            remotePosts[month] = remotePosts[month].map(rp => {
+              if(_sessionEdited.has(rp.id)) {
+                return (posts[month]||[]).find(lp => lp.id === rp.id) || rp;
+              }
+              return rp;
+            });
+          }
         }
-        // else: local is newer — keep local, push it up silently
-        else {
-          fetch(SYNC_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ posts: posts, savedAt: localTs })
-          }).catch(() => {});
-        }
+        posts = remotePosts;
+        localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
+        if(callback) callback();
       } else {
-        // Server is empty — seed it
-        saveData();
+        saveData(); // seed server with local data
       }
     })
-    .catch(() => {
-      // Network error — local data already loaded, carry on
-    });
+    .catch(() => {});
 }
 
 // ══════════════════════════════════════════════
@@ -1552,10 +1544,25 @@ function copyCaption(id, btn) {
 // ══════════════════════════════════════════════
 // DATA UPDATES
 // ══════════════════════════════════════════════
+// Session edit tracking — protects local edits from being overwritten by GET sync
+const _sessionEdited = new Set();
+let _saveTimer = null;
+function _debouncedSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(saveData, 600);
+}
+
 function updateField(id, field, value) {
   const month = currentMonth;
   const post = posts[month].find(p => p.id === id);
-  if(post) { post[field] = value; saveData(); }
+  if(post) {
+    post[field] = value;
+    _sessionEdited.add(id); // mark as locally edited
+    // Always write to localStorage immediately (synchronous, reliable)
+    localStorage.setItem('atc-posts-v2', JSON.stringify(posts));
+    // Debounced POST to server
+    _debouncedSave();
+  }
 
   // Re-render status badge
   if(field === 'status' || field === 'haleyStatus' || field === 'danaStatus') {
